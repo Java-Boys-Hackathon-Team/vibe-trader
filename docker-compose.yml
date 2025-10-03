@@ -1,0 +1,84 @@
+services:
+
+  vibe-trader-backend:
+    build: .
+    command: ["java", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005", "-Dconfig.file=/app/config/application-prod.properties", "-jar", "vibe-trader-backend.jar"]
+    volumes:
+      - './src/main/resources/application-prod.properties:/app/config/application-prod.properties'
+      - ./sources:/app/sources
+    restart: always
+    container_name: vibe-trader-backend
+    ports:
+      - "8087:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - PG_DATASOURCE_URL=jdbc:postgresql://vibe-trader-db:5432/vibetrader
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PG_NAME=pgadmin
+      - PG_PASS=pgadmin
+      - LLM_TIMEOUT_SECONDS=60
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:192.168.88.151"
+    tty: true
+    depends_on:
+      - vibe-trader-db
+
+  vibe-trader-db:
+    build:
+      dockerfile: ./Dockerfile
+      context: postgres
+    restart: always
+    container_name: vibe-trader-db
+    ports:
+      - "25437:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf
+    environment:
+      - POSTGRES_USER=pgadmin
+      - POSTGRES_PASSWORD=pgadmin
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "kuramshin.py@yandex.ru"
+      PGADMIN_DEFAULT_PASSWORD: "admin"
+      PGADMIN_LISTEN_PORT: 80
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5055:80"
+    depends_on:
+      - vibe-trader-db
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    command: [
+      "redis-server",
+      "--requirepass", "redisadmin",
+      "--appendonly", "yes",
+      "--maxmemory-policy", "allkeys-lru"
+    ]
+    ports:
+      - "26380:6379"
+    environment:
+      REDIS_PASSWORD: redisadmin
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a redisadmin ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  redis_data:
+  postgres_data:
+  pgadmin_data:
+    driver: local
