@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Configuration;
 
 import feign.Logger;
 import feign.RequestInterceptor;
+import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
+import ru.javaboys.vibetraderbackend.chat.service.SubmissionService;
 import ru.javaboys.vibetraderbackend.finam.client.api.SessionsApiV1;
 
 @Configuration
@@ -29,4 +31,11 @@ public class FinamClientConfiguration {
         );
     }
 
+    @Bean
+    public RequestInterceptor finamApiSubmissionInterceptor(
+            SubmissionService submissionService,
+            PromptRepository promptRepository
+    ) {
+        return new FinamApiSubmissionInterceptor(submissionService, promptRepository);
+    }
 }

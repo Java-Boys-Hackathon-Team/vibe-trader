@@ -12,11 +12,18 @@ import java.util.concurrent.Executor;
 @EnableAsync
 public class AsyncConfig {
 
+    private final PromptsProcessingProperties props;
+
+    public AsyncConfig(PromptsProcessingProperties props) {
+        this.props = props;
+    }
+
     @Bean(name = "taskExecutor")
     public Executor taskExecutor() {
+        int p = Math.max(1, props.getParallelism());
         ThreadPoolTaskExecutor ex = new ThreadPoolTaskExecutor();
-        ex.setCorePoolSize(4);
-        ex.setMaxPoolSize(8);
+        ex.setCorePoolSize(p);
+        ex.setMaxPoolSize(Math.max(p, p * 2));
         ex.setQueueCapacity(100);
         ex.setThreadNamePrefix("task-");
         ex.initialize();
