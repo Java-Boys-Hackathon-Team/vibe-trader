@@ -8,7 +8,10 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
+import ru.javaboys.vibetraderbackend.aop.service.ToolCallingHistoryService;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,6 +25,7 @@ public class ToolInvocationLoggingAspect {
 
     // Можно заинжектить общий ObjectMapper из контекста
     private final ObjectMapper objectMapper;
+    private final ToolCallingHistoryService toolHistoryService;
 
     /**
      * Перехватываем все методы, помеченные @Tool (Spring AI).
@@ -42,11 +46,18 @@ public class ToolInvocationLoggingAspect {
             String resultStr = stringifyResult(result);
 
             log.info("[TOOL_OK] name={}, tookMs={}, result={}", toolName, tookMs, truncate(resultStr));
+            // Persist success history (store full result without truncation)
+            toolHistoryService.recordSuccess(toolName, tookMs, resultStr);
             return result;
         } catch (Throwable t) {
             long tookMs = System.currentTimeMillis() - started;
+            StringWriter sw = new StringWriter();
+            t.printStackTrace(new PrintWriter(sw));
+            String stackTrace = sw.toString();
             log.warn("[TOOL_ERR] name={}, tookMs={}, errorClass={}, message={}",
                     toolName, tookMs, t.getClass().getSimpleName(), truncate(t.getMessage()));
+            // Persist failure history with full error details
+            toolHistoryService.recordFailure(toolName, tookMs, t.getClass().getName(), t.getMessage(), stackTrace);
             throw t;
         }
     }

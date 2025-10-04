@@ -22,12 +22,12 @@ public class AssetsServiceTools {
     @Tool(description = """
             Возвращает список доступных инструментов, их описание.
             """)
-    public AssetsResponse getAccount(
+    public void getAccount(
             @ToolParam(description = """
                     Служебный UID запроса; передай как есть, строкой.
                     """) String promptUid
     ) {
-        return assets.assets();
+        assets.assets();
     }
 
     @Tool(description = """
