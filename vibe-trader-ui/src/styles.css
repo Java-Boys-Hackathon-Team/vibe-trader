@@ -68,6 +68,7 @@ body {
     border-radius: 10px;
     cursor: pointer;
     color: var(--text);
+    margin: 0 0 8px;
 }
 
 .dialog:hover {
@@ -342,4 +343,48 @@ body {
     position: absolute;
     top: 10px;
     right: 10px;
+}
+
+/* File input styles */
+.file-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-btn {
+    background: #1b2030;
+    border: 1px solid var(--border);
+}
+
+.file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 280px;
+    background: #121621;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 8px;
+}
+
+.file-name {
+    font-size: 12px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chip-close {
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.chip-close:hover {
+    color: var(--danger);
 }

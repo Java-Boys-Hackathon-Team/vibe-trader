@@ -25,6 +25,7 @@ function App() {
     const [showModal, setShowModal] = useState(false)
     const [newTitle, setNewTitle] = useState('')
     const [error, setError] = useState<string | null>(null)
+    const [file, setFile] = useState<File | null>(null)
 
     // task polling state
     const [pendingTask, setPendingTask] = useState<TaskDto | null>(null)
@@ -115,8 +116,9 @@ function App() {
                         setMessages(m)
                     }
                 }
-            } catch (e: any) {
-                setError(e.message)
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e)
+                setError(msg)
             }
         }
         run()
@@ -131,23 +133,26 @@ function App() {
     }
 
     async function onSend() {
-        if (!input.trim() || activeId == null) return
+        if ((activeId == null) || (!input.trim() && !file)) return
         const content = input.trim()
         setInput('')
+        const pickedFile = file
+        setFile(null)
         try {
-            const res = await api.sendMessage(activeId, content)
-            // Optimistically add user message
+            const res = await api.sendMessage(activeId, content, pickedFile || undefined)
+            // Optimistically add user message (content may be empty if only file was sent)
             setMessages(prev => [...prev, {
                 id: res.userMessageId,
                 dialogId: activeId,
                 taskId: res.taskId,
                 role: 'USER',
-                content,
+                content: content,
                 createdAt: new Date().toISOString()
             }])
             startPolling(res.taskId)
-        } catch (e: any) {
-            setError(e.message)
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            setError(msg)
         }
     }
 
@@ -162,8 +167,9 @@ function App() {
             setMessages([])
             setPendingTask(null)
             stopPolling()
-        } catch (e: any) {
-            setError(e.message)
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e)
+            setError(msg)
         }
     }
 
@@ -230,6 +236,32 @@ function App() {
                 </div>
                 <div className="input-bar">
                     <div className="input">
+                        <div className="file-input-wrapper">
+                            <label className="btn file-btn">
+                                Выбрать CSV
+                                <input
+                                    type="file"
+                                    accept=".csv,text/csv"
+                                    onChange={(e) => {
+                                        const f = e.target.files?.[0] || null
+                                        if (f && !f.name.toLowerCase().endsWith('.csv')) {
+                                            setError('Пожалуйста, выберите CSV файл (.csv)')
+                                            e.currentTarget.value = ''
+                                            setFile(null)
+                                            return
+                                        }
+                                        setFile(f || null)
+                                    }}
+                                    style={{ display: 'none' }}
+                                />
+                            </label>
+                            {file && (
+                                <div className="file-chip" title={file.name}>
+                                    <span className="file-name">{file.name}</span>
+                                    <button className="chip-close" onClick={() => setFile(null)} aria-label="Убрать файл">×</button>
+                                </div>
+                            )}
+                        </div>
                         <textarea className="textarea" placeholder="Введите сообщение…" value={input}
                                   onChange={e => setInput(e.target.value)} onKeyDown={e => {
                             if (e.key === 'Enter' && !e.shiftKey) {
@@ -238,7 +270,7 @@ function App() {
                             }
                         }}/>
                         <button className="btn send-btn" onClick={onSend}
-                                disabled={!activeDialog || !input.trim()}>Отправить
+                                disabled={!activeDialog || (!input.trim() && !file)}>Отправить
                         </button>
                     </div>
                 </div>
