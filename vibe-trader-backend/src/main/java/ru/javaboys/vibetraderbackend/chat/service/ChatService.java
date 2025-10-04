@@ -11,8 +11,15 @@ import ru.javaboys.vibetraderbackend.chat.dto.SendMessageResponse;
 import ru.javaboys.vibetraderbackend.chat.model.*;
 import ru.javaboys.vibetraderbackend.chat.repository.ChatMessageRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.DialogRepository;
+import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.UserAsyncTaskRepository;
 
+import com.univocity.parsers.csv.CsvParser;
+import com.univocity.parsers.csv.CsvParserSettings;
+
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -24,6 +31,7 @@ public class ChatService {
     private final DialogRepository dialogRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final UserAsyncTaskRepository taskRepository;
+    private final PromptRepository promptRepository;
     private final ChatAsyncProcessor asyncProcessor;
 
     @Transactional
@@ -71,19 +79,85 @@ public class ChatService {
 
     @Transactional
     public SendMessageResponse sendUserMessage(Long dialogId, String content, MultipartFile file) {
+        // 1) Resolve dialog
+        Dialog dialog = dialogRepository.findById(dialogId)
+                .orElseThrow(() -> new IllegalArgumentException("Dialog not found: " + dialogId));
+
+        // 2) If CSV is provided, parse it first into memory to fail fast before creating task/message
+        List<Prompt> parsedPrompts = new ArrayList<>();
+        boolean isCsv = false;
         if (file != null && !file.isEmpty()) {
             String filename = file.getOriginalFilename();
             String ext = (filename != null) ? StringUtils.getFilenameExtension(filename) : null;
-            if (ext != null && ext.equalsIgnoreCase("csv")) {
+            isCsv = ext != null && ext.equalsIgnoreCase("csv");
+            if (isCsv) {
                 log.info("Accepted CSV file '{}' for dialog {}", filename, dialogId);
+                try (InputStreamReader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
+                    CsvParserSettings settings = new CsvParserSettings();
+                    settings.setHeaderExtractionEnabled(true);
+                    settings.setLineSeparatorDetectionEnabled(true);
+                    settings.getFormat().setDelimiter(';');
+                    settings.trimValues(true);
+                    CsvParser parser = new CsvParser(settings);
+
+                    var records = parser.parseAllRecords(reader);
+                    if (records.isEmpty()) {
+                        log.warn("CSV file '{}' contains no data rows", filename);
+                    }
+                    for (var rec : records) {
+                        String uid = rec.getString("uid");
+                        String question = rec.getString("question");
+                        if (uid == null || uid.isBlank()) {
+                            log.debug("Skipping row without uid: {}", rec);
+                            continue;
+                        }
+                        if (question == null) {
+                            question = "";
+                        }
+                        // Temporarily create Prompt without chatMessage; we'll attach after message is saved
+                        parsedPrompts.add(Prompt.builder()
+                                .uid(uid.trim())
+                                .question(question)
+                                .build());
+                    }
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Invalid CSV file. Expected header 'uid;question' and UTF-8 encoding.", e);
+                }
             } else {
                 log.info("Accepted file '{}' (ext={}) for dialog {}", filename, ext, dialogId);
             }
         } else {
             log.info("No file provided for dialog {}", dialogId);
         }
-        // Delegate to the primary method to keep persistence and async behavior consistent
-        return sendUserMessage(dialogId, content);
+
+        // 3) Create async task and user message
+        UserAsyncTask task = taskRepository.save(UserAsyncTask.builder().status(TaskStatus.RUNNING).build());
+        ChatMessage userMessage = ChatMessage.builder()
+                .dialog(dialog)
+                .task(task)
+                .role(MessageRole.USER)
+                .content(content)
+                .build();
+        userMessage = chatMessageRepository.save(userMessage);
+
+        // 4) Persist parsed prompts (if any) linked to this ChatMessage
+        if (isCsv && !parsedPrompts.isEmpty()) {
+            var messageRef = chatMessageRepository.getReferenceById(userMessage.getId());
+            for (Prompt p : parsedPrompts) {
+                p.setChatMessage(messageRef);
+            }
+            promptRepository.saveAll(parsedPrompts);
+            log.info("Saved {} prompt rows for chatMessage {}", parsedPrompts.size(), userMessage.getId());
+        }
+
+        // 5) Trigger async processing
+        asyncProcessor.processUserMessage(task.getId(), dialog.getId(), content);
+
+        return SendMessageResponse.builder()
+                .taskId(task.getId())
+                .userMessageId(userMessage.getId())
+                .status(task.getStatus())
+                .build();
     }
 
     @Transactional(readOnly = true)
