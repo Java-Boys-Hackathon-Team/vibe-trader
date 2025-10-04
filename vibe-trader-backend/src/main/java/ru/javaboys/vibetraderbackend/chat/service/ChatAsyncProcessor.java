@@ -1,10 +1,15 @@
 package ru.javaboys.vibetraderbackend.chat.service;
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import ru.javaboys.vibetraderbackend.agent.PromptTemplates;
 import ru.javaboys.vibetraderbackend.agent.ctx.AssistantMessageContextHolder;
 import ru.javaboys.vibetraderbackend.agent.tools.AccountsServiceTools;
@@ -23,10 +28,6 @@ import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.UserAsyncTaskRepository;
 import ru.javaboys.vibetraderbackend.llm.LlmRequest;
 import ru.javaboys.vibetraderbackend.llm.LlmService;
-
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Component
@@ -66,8 +67,11 @@ public class ChatAsyncProcessor {
             if (hadCsv) {
                 List<Prompt> prompts = promptRepository.findByChatMessage_Id(userMessageId);
                 if (!prompts.isEmpty()) {
-                    log.info("Processing {} prompts sequentially", prompts.size());
-                    for (Prompt p : prompts) {
+                    log.info("=====> Processing {} prompts sequentially", prompts.size());
+                    for (int i = 0; i < prompts.size(); i++) {
+                        log.info("Running {} of {} prompts", i, prompts.size());
+
+                        Prompt p = prompts.get(i);
                         final String promptUid = p.getUid();
                         final String question = p.getQuestion() == null ? "" : p.getQuestion();
                         AssistantMessageContextHolder.set(assistantMessageSaved);
@@ -88,6 +92,7 @@ public class ChatAsyncProcessor {
                         } finally {
                             AssistantMessageContextHolder.clear();
                         }
+
                     }
                     log.info("All {} prompts processed sequentially", prompts.size());
                 } else {

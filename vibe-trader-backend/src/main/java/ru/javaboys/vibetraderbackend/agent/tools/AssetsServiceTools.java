@@ -1,11 +1,17 @@
 package ru.javaboys.vibetraderbackend.agent.tools;
 
+import java.util.List;
+
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.RequiredArgsConstructor;
 import ru.javaboys.vibetraderbackend.finam.client.api.AssetsApiV1;
+import ru.javaboys.vibetraderbackend.finam.dto.asset.Asset;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetOptionResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetParamResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetResponse;
@@ -18,6 +24,7 @@ import ru.javaboys.vibetraderbackend.finam.dto.asset.ClockResponse;
 public class AssetsServiceTools {
 
     private final AssetsApiV1 assets;
+    private final ObjectMapper om;
 
     @Tool(description = """
             Возвращает список доступных инструментов, их описание.
@@ -25,9 +32,22 @@ public class AssetsServiceTools {
     public AssetsResponse getAccount(
             @ToolParam(description = """
                     Служебный UID запроса; передай как есть, строкой.
-                    """) String promptUid
+                    """) String promptUid,
+            @ToolParam(description = """
+                    Описание инструмента
+                    """) String tool
     ) {
-        return assets.assets();
+        List<Asset> list = assets.assets().getAssets().stream()
+                .filter(a -> {
+                    try {
+                        return om.writeValueAsString(a).contains(tool);
+                    } catch (JsonProcessingException e) {
+                        return false;
+                    }
+                })
+                .toList();
+
+        return AssetsResponse.builder().assets(list).build();
     }
 
     @Tool(description = """
