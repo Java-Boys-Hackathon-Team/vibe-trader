@@ -46,16 +46,16 @@ import ru.javaboys.vibetraderbackend.finam.dto.transaction.TransactionsResponse;
 import ru.javaboys.vibetraderbackend.utils.DotenvTestExecutionListener;
 
 //@SpringBootTest
-@TestExecutionListeners(
-        listeners = DotenvTestExecutionListener.class,
-        mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS
-)
+//@TestExecutionListeners(
+//        listeners = DotenvTestExecutionListener.class,
+//        mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS
+//)
 public class FinamClientTest {
     @Autowired private FinamClient finamClient;
     @Value("${finam-api.secret}") String secret;
 
-    @Test
-    @Disabled
+//    @Test
+//    @Disabled
     public void testClient() {
 
         boolean checkSessions = true;

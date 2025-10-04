@@ -17,6 +17,12 @@ public class BigDecimalValueWrapper {
     @JsonProperty("value")
     private final BigDecimal value;
 
+    public static BigDecimalValueWrapper valueOf(BigDecimal value) {
+        return BigDecimalValueWrapper.builder()
+                .value(value)
+                .build();
+    }
+
     public static BigDecimalValueWrapper valueOf(long value) {
         return BigDecimalValueWrapper.builder()
                 .value(BigDecimal.valueOf(value))

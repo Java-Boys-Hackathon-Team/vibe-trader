@@ -30,6 +30,7 @@ public interface AccountsApiV1 {
             @PathVariable("accountId") String accountId
     );
 
+    @Deprecated // Not working for demo accounts
     @GetMapping(value = "/{accountId}/trades")
     TradesResponse trades(
             @PathVariable("accountId") String accountId,
@@ -38,6 +39,7 @@ public interface AccountsApiV1 {
             @RequestParam("limit") Long limit
     );
 
+    @Deprecated // Not working for demo accounts
     @GetMapping(value = "/{accountId}/transactions")
     TransactionsResponse transactions(
             @PathVariable("accountId") String accountId,
