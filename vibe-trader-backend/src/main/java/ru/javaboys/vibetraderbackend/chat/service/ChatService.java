@@ -14,8 +14,9 @@ import ru.javaboys.vibetraderbackend.chat.repository.DialogRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.UserAsyncTaskRepository;
 
-import com.univocity.parsers.csv.CsvParser;
-import com.univocity.parsers.csv.CsvParserSettings;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -93,32 +94,40 @@ public class ChatService {
             if (isCsv) {
                 log.info("Accepted CSV file '{}' for dialog {}", filename, dialogId);
                 try (InputStreamReader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
-                    CsvParserSettings settings = new CsvParserSettings();
-                    settings.setHeaderExtractionEnabled(true);
-                    settings.setLineSeparatorDetectionEnabled(true);
-                    settings.getFormat().setDelimiter(';');
-                    settings.trimValues(true);
-                    CsvParser parser = new CsvParser(settings);
-
-                    var records = parser.parseAllRecords(reader);
-                    if (records.isEmpty()) {
-                        log.warn("CSV file '{}' contains no data rows", filename);
-                    }
-                    for (var rec : records) {
-                        String uid = rec.getString("uid");
-                        String question = rec.getString("question");
-                        if (uid == null || uid.isBlank()) {
-                            log.debug("Skipping row without uid: {}", rec);
-                            continue;
+                    CSVFormat format = CSVFormat.DEFAULT.builder()
+                            .setDelimiter(';')
+                            .setIgnoreSurroundingSpaces(true)
+                            .setTrim(true)
+                            .setHeader()
+                            .setSkipHeaderRecord(true)
+                            .build();
+                    try (CSVParser parser = new CSVParser(reader, format)) {
+                        List<CSVRecord> records = parser.getRecords();
+                        if (records.isEmpty()) {
+                            log.warn("CSV file '{}' contains no data rows", filename);
                         }
-                        if (question == null) {
-                            question = "";
+                        for (CSVRecord rec : records) {
+                            String uid = null;
+                            String question = null;
+                            try {
+                                uid = rec.get("uid");
+                                question = rec.isMapped("question") ? rec.get("question") : null;
+                            } catch (IllegalArgumentException ex) {
+                                throw new IllegalArgumentException("Invalid CSV header. Expected 'uid;question' columns.", ex);
+                            }
+                            if (uid == null || uid.isBlank()) {
+                                log.debug("Skipping row without uid: {}", rec);
+                                continue;
+                            }
+                            if (question == null) {
+                                question = "";
+                            }
+                            // Temporarily create Prompt without chatMessage; we'll attach after message is saved
+                            parsedPrompts.add(Prompt.builder()
+                                    .uid(uid.trim())
+                                    .question(question)
+                                    .build());
                         }
-                        // Temporarily create Prompt without chatMessage; we'll attach after message is saved
-                        parsedPrompts.add(Prompt.builder()
-                                .uid(uid.trim())
-                                .question(question)
-                                .build());
                     }
                 } catch (Exception e) {
                     throw new IllegalArgumentException("Invalid CSV file. Expected header 'uid;question' and UTF-8 encoding.", e);

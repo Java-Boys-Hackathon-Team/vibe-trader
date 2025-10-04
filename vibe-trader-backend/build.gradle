@@ -40,8 +40,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-web'
 
-    // CSV parsing (uniVocity)
-    implementation 'com.univocity:univocity-parsers:2.9.1'
+    // CSV parsing (Apache Commons CSV)
+    implementation 'org.apache.commons:commons-csv:1.14.1'
 
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-cache'
