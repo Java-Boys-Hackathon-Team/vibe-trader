@@ -8,11 +8,13 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.javaboys.vibetraderbackend.chat.model.*;
 import ru.javaboys.vibetraderbackend.chat.repository.ChatMessageRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.DialogRepository;
+import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.UserAsyncTaskRepository;
 import ru.javaboys.vibetraderbackend.llm.LlmRequest;
 import ru.javaboys.vibetraderbackend.llm.LlmService;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -23,10 +25,12 @@ public class ChatAsyncProcessor {
     private final ChatMessageRepository chatMessageRepository;
     private final UserAsyncTaskRepository taskRepository;
     private final DialogRepository dialogRepository;
+    private final PromptRepository promptRepository;
+    private final SubmissionService submissionService;
 
     @Async("taskExecutor")
     @Transactional
-    public void processUserMessage(Long taskId, Long dialogId, String userContent) {
+    public void processUserMessage(Long taskId, Long dialogId, Long userMessageId, String userContent, boolean hadCsv) {
         log.info("Start processing task {} for dialog {}", taskId, dialogId);
         UserAsyncTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new IllegalArgumentException("Task not found: " + taskId));
@@ -47,7 +51,28 @@ public class ChatAsyncProcessor {
                     .role(MessageRole.ASSISTANT)
                     .content(answer)
                     .build();
-            chatMessageRepository.save(assistantMessage);
+            assistantMessage = chatMessageRepository.save(assistantMessage);
+
+            // If CSV was uploaded for the triggering user message, create submissions
+            if (hadCsv) {
+                List<Prompt> prompts = promptRepository.findByChatMessage_Id(userMessageId);
+                if (!prompts.isEmpty()) {
+                    for (Prompt p : prompts) {
+                        String req = (p.getQuestion() != null && p.getQuestion().startsWith("/"))
+                                ? p.getQuestion() : "/submissions/" + p.getUid();
+                        submissionService.upsertByPromtUid(
+                                p.getUid(),
+                                HttpMethodType.GET,
+                                req,
+                                p,
+                                assistantMessage
+                        );
+                    }
+                    log.info("Created/updated {} submissions for assistantMessage {}", prompts.size(), assistantMessage.getId());
+                } else {
+                    log.info("No prompts found for userMessage {}. Skipping submissions.", userMessageId);
+                }
+            }
 
             task.setStatus(TaskStatus.DONE);
             task.setCompletedAt(OffsetDateTime.now());

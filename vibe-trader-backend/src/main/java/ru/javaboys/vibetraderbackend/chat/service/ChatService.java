@@ -69,7 +69,7 @@ public class ChatService {
         userMessage = chatMessageRepository.save(userMessage);
 
         // Trigger async processing for assistant response
-        asyncProcessor.processUserMessage(task.getId(), dialog.getId(), content);
+        asyncProcessor.processUserMessage(task.getId(), dialog.getId(), userMessage.getId(), content, false);
 
         return SendMessageResponse.builder()
                 .taskId(task.getId())
@@ -160,7 +160,7 @@ public class ChatService {
         }
 
         // 5) Trigger async processing
-        asyncProcessor.processUserMessage(task.getId(), dialog.getId(), content);
+        asyncProcessor.processUserMessage(task.getId(), dialog.getId(), userMessage.getId(), content, isCsv);
 
         return SendMessageResponse.builder()
                 .taskId(task.getId())
