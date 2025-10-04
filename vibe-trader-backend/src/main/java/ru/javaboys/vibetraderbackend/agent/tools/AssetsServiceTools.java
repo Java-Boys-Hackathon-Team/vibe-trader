@@ -1,22 +1,15 @@
 package ru.javaboys.vibetraderbackend.agent.tools;
 
-import java.util.List;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import lombok.RequiredArgsConstructor;
 import ru.javaboys.vibetraderbackend.finam.client.api.AssetsApiV1;
-import ru.javaboys.vibetraderbackend.finam.dto.asset.Asset;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetOptionResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetParamResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetScheduleResponse;
-import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetsResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.ClockResponse;
 
 @Component

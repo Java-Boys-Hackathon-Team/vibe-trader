@@ -1,20 +1,19 @@
 package ru.javaboys.vibetraderbackend.agent.tools;
 
-import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
-
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
-
-import lombok.RequiredArgsConstructor;
 import ru.javaboys.vibetraderbackend.finam.client.api.InstrumentsApiV1;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.BarsResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.LatestTrade;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.LatestTradesResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.QuoteResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.TimeFrameType;
+
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor

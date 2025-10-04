@@ -1,7 +1,6 @@
 package ru.javaboys.vibetraderbackend.finam.dto.trade;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import lombok.Builder;
 import lombok.Getter;
 import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;

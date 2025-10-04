@@ -1,13 +1,12 @@
 package ru.javaboys.vibetraderbackend.finam.dto;
 
-import java.math.BigDecimal;
-
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
-
 import lombok.Builder;
 import lombok.Getter;
+
+import java.math.BigDecimal;
 
 @Getter
 @Builder

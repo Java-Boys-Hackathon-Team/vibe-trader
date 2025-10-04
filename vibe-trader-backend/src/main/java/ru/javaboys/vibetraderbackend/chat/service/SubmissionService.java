@@ -6,7 +6,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.javaboys.vibetraderbackend.chat.model.*;
+import ru.javaboys.vibetraderbackend.chat.model.ChatMessage;
+import ru.javaboys.vibetraderbackend.chat.model.HttpMethodType;
+import ru.javaboys.vibetraderbackend.chat.model.Prompt;
+import ru.javaboys.vibetraderbackend.chat.model.Submission;
 import ru.javaboys.vibetraderbackend.chat.repository.SubmissionRepository;
 
 import java.net.URI;

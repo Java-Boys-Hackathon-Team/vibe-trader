@@ -1,10 +1,9 @@
 package ru.javaboys.vibetraderbackend.finam.client;
 
-import java.util.concurrent.atomic.AtomicReference;
-
 import org.springframework.stereotype.Service;
-
 import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsResponse;
+
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class TokenInfoHolder {

@@ -1,8 +1,5 @@
 package ru.javaboys.vibetraderbackend.finam.client;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +9,9 @@ import ru.javaboys.vibetraderbackend.finam.dto.auth.AuthRequest;
 import ru.javaboys.vibetraderbackend.finam.dto.auth.AuthResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsRequest;
 import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsResponse;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 @Slf4j
 @RequiredArgsConstructor

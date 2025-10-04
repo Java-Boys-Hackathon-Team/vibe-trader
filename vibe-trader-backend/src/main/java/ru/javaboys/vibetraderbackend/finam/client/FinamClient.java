@@ -1,11 +1,10 @@
 package ru.javaboys.vibetraderbackend.finam.client;
 
-import org.springframework.stereotype.Service;
-
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 import ru.javaboys.vibetraderbackend.finam.client.api.AccountsApiV1;
 import ru.javaboys.vibetraderbackend.finam.client.api.AssetsApiV1;
 import ru.javaboys.vibetraderbackend.finam.client.api.ExchangesApiV1;

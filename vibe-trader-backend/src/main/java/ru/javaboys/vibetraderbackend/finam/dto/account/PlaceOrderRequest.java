@@ -1,14 +1,12 @@
 package ru.javaboys.vibetraderbackend.finam.dto.account;
 
-import java.util.List;
-
-import javax.validation.constraints.Size;
-
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import lombok.Builder;
 import lombok.Getter;
 import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+import javax.validation.constraints.Size;
+import java.util.List;
 
 @Getter
 @Builder

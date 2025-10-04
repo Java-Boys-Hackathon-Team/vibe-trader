@@ -1,11 +1,10 @@
 package ru.javaboys.vibetraderbackend.finam.dto.exchange;
 
-import java.util.List;
-
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import lombok.Builder;
 import lombok.Getter;
+
+import java.util.List;
 
 @Getter
 @Builder
