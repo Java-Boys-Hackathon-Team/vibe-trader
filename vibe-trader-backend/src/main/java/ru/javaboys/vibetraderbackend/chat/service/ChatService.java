@@ -1,22 +1,28 @@
 package ru.javaboys.vibetraderbackend.chat.service;
 
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import ru.javaboys.vibetraderbackend.chat.dto.SendMessageResponse;
-import ru.javaboys.vibetraderbackend.chat.model.*;
+import ru.javaboys.vibetraderbackend.chat.model.ChatMessage;
+import ru.javaboys.vibetraderbackend.chat.model.Dialog;
+import ru.javaboys.vibetraderbackend.chat.model.MessageRole;
+import ru.javaboys.vibetraderbackend.chat.model.Prompt;
+import ru.javaboys.vibetraderbackend.chat.model.TaskStatus;
+import ru.javaboys.vibetraderbackend.chat.model.UserAsyncTask;
 import ru.javaboys.vibetraderbackend.chat.repository.ChatMessageRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.DialogRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.UserAsyncTaskRepository;
-
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
+import ru.javaboys.vibetraderbackend.event.TaskCreatedEvent;
 
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -34,6 +40,7 @@ public class ChatService {
     private final UserAsyncTaskRepository taskRepository;
     private final PromptRepository promptRepository;
     private final ChatAsyncProcessor asyncProcessor;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public Dialog createDialog(String title) {
@@ -140,7 +147,12 @@ public class ChatService {
         }
 
         // 3) Create async task and user message
-        UserAsyncTask task = taskRepository.save(UserAsyncTask.builder().status(TaskStatus.RUNNING).build());
+        UserAsyncTask task = taskRepository.save( UserAsyncTask.builder().status( TaskStatus.RUNNING ).build() );
+        log.info( "Задача сохранена в БД, id={}", task.getId() );
+
+        events.publishEvent( new TaskCreatedEvent( task.getId() ) );
+        log.info( "Опубликовано событие TaskCreatedEvent для задачи id={}", task.getId() );
+
         ChatMessage userMessage = ChatMessage.builder()
                 .dialog(dialog)
                 .task(task)
