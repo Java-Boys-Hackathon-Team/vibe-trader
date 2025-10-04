@@ -6,13 +6,14 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 import ru.javaboys.vibetraderbackend.finam.client.api.InstrumentsApiV1;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.BarsResponse;
-import ru.javaboys.vibetraderbackend.finam.dto.instrument.LasestOrderBookResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.instrument.LatestTrade;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.LatestTradesResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.QuoteResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.TimeFrameType;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -117,26 +118,33 @@ public class InstrumentsServiceTools {
             @ToolParam(description = "Служебный UID запроса; передай как есть, строкой") String promptUid,
             @ToolParam(description = "Тикер инструмента, например: SBER, GAZP, AAPL") String symbol
     ) {
-        return instrumentsApi.latestTrades(symbol);
+        LatestTradesResponse tradesResponse = instrumentsApi.latestTrades(symbol);
+        List<LatestTrade> list = tradesResponse.getTrades().stream()
+                .limit(20)
+                .toList();
+        return LatestTradesResponse.builder()
+                .symbol(tradesResponse.getSymbol())
+                .trades(list)
+                .build();
     }
 
-    @Tool(description = """
-        Получает текущий стакан (OrderBook) по инструменту.
-
-        Вход:
-          - promptUid: служебный идентификатор запроса
-          - symbol: тикер инструмента.
-
-        Выход (LasestOrderBookResponse):
-          - symbol   (string) — символ инструмента;
-          - orderbook (object) — стакан:
-              • rows (array of Row) — уровни стакана (bid/ask). Как минимум содержат цену и объём
-                по каждой стороне. В типовых схемах у Row есть поля вроде side (bid/ask), price, size/quantity.
-        """)
-    public LasestOrderBookResponse getOrderBook(
-            @ToolParam(description = "Служебный UID запроса; передай как есть, строкой") String promptUid,
-            @ToolParam(description = "Тикер инструмента, например: SBER, GAZP, AAPL") String symbol
-    ) {
-        return instrumentsApi.latestOrderBook(symbol);
-    }
+//    @Tool(description = """
+//        Получает текущий стакан (OrderBook) по инструменту.
+//
+//        Вход:
+//          - promptUid: служебный идентификатор запроса
+//          - symbol: тикер инструмента.
+//
+//        Выход (LasestOrderBookResponse):
+//          - symbol   (string) — символ инструмента;
+//          - orderbook (object) — стакан:
+//              • rows (array of Row) — уровни стакана (bid/ask). Как минимум содержат цену и объём
+//                по каждой стороне. В типовых схемах у Row есть поля вроде side (bid/ask), price, size/quantity.
+//        """)
+//    public LasestOrderBookResponse getOrderBook(
+//            @ToolParam(description = "Служебный UID запроса; передай как есть, строкой") String promptUid,
+//            @ToolParam(description = "Тикер инструмента, например: SBER, GAZP, AAPL") String symbol
+//    ) {
+//        return instrumentsApi.latestOrderBook(symbol);
+//    }
 }

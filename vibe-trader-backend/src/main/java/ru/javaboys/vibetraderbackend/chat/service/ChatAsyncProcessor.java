@@ -15,11 +15,13 @@ import ru.javaboys.vibetraderbackend.chat.model.ChatMessage;
 import ru.javaboys.vibetraderbackend.chat.model.Dialog;
 import ru.javaboys.vibetraderbackend.chat.model.MessageRole;
 import ru.javaboys.vibetraderbackend.chat.model.Prompt;
+import ru.javaboys.vibetraderbackend.chat.model.Submission;
 import ru.javaboys.vibetraderbackend.chat.model.TaskStatus;
 import ru.javaboys.vibetraderbackend.chat.model.UserAsyncTask;
 import ru.javaboys.vibetraderbackend.chat.repository.ChatMessageRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.DialogRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
+import ru.javaboys.vibetraderbackend.chat.repository.SubmissionRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.UserAsyncTaskRepository;
 import ru.javaboys.vibetraderbackend.llm.LlmRequest;
 import ru.javaboys.vibetraderbackend.llm.LlmService;
@@ -27,6 +29,8 @@ import ru.javaboys.vibetraderbackend.llm.LlmService;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -38,6 +42,8 @@ public class ChatAsyncProcessor {
     private final UserAsyncTaskRepository taskRepository;
     private final DialogRepository dialogRepository;
     private final PromptRepository promptRepository;
+    private final SubmissionRepository submissionRepository;
+    private final PromptCleanupService promptCleanupService;
 
     private final AccountsServiceTools accountsTools;
     private final AssetsServiceTools assetsTools;
@@ -66,8 +72,21 @@ public class ChatAsyncProcessor {
             if (hadCsv) {
                 List<Prompt> prompts = promptRepository.findByChatMessage_Id(userMessageId);
                 if (!prompts.isEmpty()) {
-                    log.info("Processing {} prompts sequentially", prompts.size());
-                    for (Prompt p : prompts) {
+                    // Exclude prompts that already have submissions (match by Prompt.uid == Submission.promtUid)
+                    Set<String> uids = prompts.stream().map(Prompt::getUid).collect(Collectors.toSet());
+                    List<Submission> existingSubs = submissionRepository.findAllByPromtUidIn(uids);
+                    Set<String> existingUids = existingSubs.stream().map(Submission::getPromtUid).collect(Collectors.toSet());
+                    List<Prompt> toProcess = prompts.stream()
+                            .filter(p -> !existingUids.contains(p.getUid()))
+                            .collect(Collectors.toList());
+
+                    int skipped = prompts.size() - toProcess.size();
+                    if (skipped > 0) {
+                        log.info("{} prompts skipped because submissions already exist (by uid)", skipped);
+                    }
+
+                    log.info("Processing {} prompts sequentially", toProcess.size());
+                    for (Prompt p : toProcess) {
                         final String promptUid = p.getUid();
                         final String question = p.getQuestion() == null ? "" : p.getQuestion();
                         AssistantMessageContextHolder.set(assistantMessageSaved);
@@ -78,7 +97,7 @@ public class ChatAsyncProcessor {
                                     """;
                             llmService.call(
                                     LlmRequest.builder()
-                                            .conversationId(String.valueOf(dialogId))
+                                            //.conversationId(String.valueOf(dialogId))
                                             .systemMessage(PromptTemplates.SYSTEM_MAPPING)
                                             .userMessage(user)
                                             .userVariables(Map.of("uid", promptUid, "q", question))
@@ -95,7 +114,7 @@ public class ChatAsyncProcessor {
                 }
             } else {
                 String answer = llmService.call(LlmRequest.builder()
-                        .conversationId(String.valueOf(dialogId))
+//                        .conversationId(String.valueOf(dialogId))
                         .userMessage(userContent == null ? "" : userContent)
                         .tools(tools)
                         .build());

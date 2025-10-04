@@ -1,16 +1,15 @@
 package ru.javaboys.vibetraderbackend.agent.tools;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
-
-import lombok.RequiredArgsConstructor;
 import ru.javaboys.vibetraderbackend.finam.client.api.AssetsApiV1;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetOptionResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetParamResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetScheduleResponse;
-import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetsResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.asset.ClockResponse;
 
 @Component
@@ -18,16 +17,20 @@ import ru.javaboys.vibetraderbackend.finam.dto.asset.ClockResponse;
 public class AssetsServiceTools {
 
     private final AssetsApiV1 assets;
+    private final ObjectMapper om;
 
     @Tool(description = """
             Возвращает список доступных инструментов, их описание.
             """)
-    public AssetsResponse getAccount(
+    public void getAccount(
             @ToolParam(description = """
                     Служебный UID запроса; передай как есть, строкой.
-                    """) String promptUid
+                    """) String promptUid,
+            @ToolParam(description = """
+                    Описание инструмента
+                    """) String tool
     ) {
-        return assets.assets();
+        assets.assets();
     }
 
     @Tool(description = """

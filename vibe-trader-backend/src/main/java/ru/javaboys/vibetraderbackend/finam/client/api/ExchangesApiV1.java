@@ -2,7 +2,6 @@ package ru.javaboys.vibetraderbackend.finam.client.api;
 
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
-
 import ru.javaboys.vibetraderbackend.finam.client.FinamClientConfiguration;
 import ru.javaboys.vibetraderbackend.finam.dto.exchange.ExchangesResponse;
 

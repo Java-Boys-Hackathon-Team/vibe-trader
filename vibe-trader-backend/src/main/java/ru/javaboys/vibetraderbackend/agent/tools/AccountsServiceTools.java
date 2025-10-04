@@ -1,13 +1,9 @@
 package ru.javaboys.vibetraderbackend.agent.tools;
 
-import java.math.BigDecimal;
-import java.util.List;
-
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
-
-import lombok.RequiredArgsConstructor;
 import ru.javaboys.vibetraderbackend.finam.client.TokenInfoHolder;
 import ru.javaboys.vibetraderbackend.finam.client.api.AccountsApiV1;
 import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
@@ -21,6 +17,9 @@ import ru.javaboys.vibetraderbackend.finam.dto.account.StopConditionType;
 import ru.javaboys.vibetraderbackend.finam.dto.account.TimeInForceType;
 import ru.javaboys.vibetraderbackend.finam.dto.account.ValidBeforeType;
 import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsResponse;
+
+import java.math.BigDecimal;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor

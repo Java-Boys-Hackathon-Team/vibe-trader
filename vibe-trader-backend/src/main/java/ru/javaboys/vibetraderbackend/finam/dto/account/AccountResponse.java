@@ -1,12 +1,11 @@
 package ru.javaboys.vibetraderbackend.finam.dto.account;
 
-import java.util.List;
-
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import lombok.Builder;
 import lombok.Getter;
 import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+import java.util.List;
 
 @Getter
 @Builder

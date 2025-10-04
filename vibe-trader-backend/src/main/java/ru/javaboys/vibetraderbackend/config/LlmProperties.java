@@ -4,8 +4,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import java.util.List;
-
 @Getter
 @RequiredArgsConstructor
 @ConfigurationProperties(prefix = "llm")

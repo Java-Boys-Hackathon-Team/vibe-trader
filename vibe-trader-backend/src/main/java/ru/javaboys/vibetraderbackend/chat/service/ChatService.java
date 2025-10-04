@@ -40,6 +40,7 @@ public class ChatService {
     private final UserAsyncTaskRepository taskRepository;
     private final PromptRepository promptRepository;
     private final ChatAsyncProcessor asyncProcessor;
+    private final PromptCleanupService promptCleanupService;
 
     @Transactional
     public Dialog createDialog(String title) {
@@ -71,6 +72,8 @@ public class ChatService {
             String ext = (filename != null) ? StringUtils.getFilenameExtension(filename) : null;
             isCsv = ext != null && ext.equalsIgnoreCase("csv");
             if (isCsv) {
+                // Clear prompts in a separate transaction and commit before proceeding
+                promptCleanupService.clearPrompts();
                 log.info("Accepted CSV file '{}' for dialog {}", filename, dialogId);
                 try (InputStreamReader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
                     CSVFormat format = CSVFormat.DEFAULT.builder()
