@@ -115,6 +115,15 @@ function App() {
                         const m = await api.getMessages(activeId)
                         setMessages(m)
                     }
+                    // Try to download CSV submissions when task is DONE
+                    if (t.status === 'DONE') {
+                        try {
+                            await api.downloadTaskSubmission(taskId)
+                        } catch (err) {
+                            const msg = err instanceof Error ? err.message : String(err)
+                            setError(`Ошибка при загрузке CSV: ${msg}`)
+                        }
+                    }
                 }
             } catch (e: unknown) {
                 const msg = e instanceof Error ? e.message : String(e)

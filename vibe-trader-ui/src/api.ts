@@ -75,4 +75,29 @@ export const api = {
   getTask(taskId: number): Promise<TaskDto> {
     return http(`${BASE}/tasks/${taskId}`);
   },
+  async downloadTaskSubmission(taskId: number): Promise<boolean> {
+    const res = await fetch(`${BASE}/tasks/${taskId}/submission`, { headers: { 'Accept': 'text/csv' } });
+    if (res.status === 404) return false;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition') || '';
+    let filename = `submissions_task_${taskId}.csv`;
+    const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd || '');
+    if (match) {
+      const fn = decodeURIComponent(match[1] || match[2] || '').trim();
+      if (fn) filename = fn;
+    }
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    return true;
+  }
 };
