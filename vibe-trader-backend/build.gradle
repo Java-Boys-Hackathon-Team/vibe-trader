@@ -52,9 +52,6 @@ dependencies {
     implementation 'org.springframework.ai:spring-ai-starter-model-chat-memory-repository-jdbc'
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
-    // Resilience4j
-    implementation 'io.github.resilience4j:resilience4j-timelimiter:2.3.0'
-
     implementation 'org.liquibase:liquibase-core'
     implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
     runtimeOnly 'org.postgresql:postgresql'

@@ -9,7 +9,6 @@ import ru.javaboys.vibetraderbackend.agent.PromptTemplates;
 import ru.javaboys.vibetraderbackend.agent.ctx.AssistantMessageContextHolder;
 import ru.javaboys.vibetraderbackend.agent.tools.AccountsServiceTools;
 import ru.javaboys.vibetraderbackend.agent.tools.AssetsServiceTools;
-import ru.javaboys.vibetraderbackend.agent.tools.AuthServiceTools;
 import ru.javaboys.vibetraderbackend.agent.tools.ExchangesServiceTools;
 import ru.javaboys.vibetraderbackend.agent.tools.InstrumentsServiceTools;
 import ru.javaboys.vibetraderbackend.chat.model.ChatMessage;
@@ -22,15 +21,12 @@ import ru.javaboys.vibetraderbackend.chat.repository.ChatMessageRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.DialogRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.UserAsyncTaskRepository;
-import ru.javaboys.vibetraderbackend.config.PromptsProcessingProperties;
 import ru.javaboys.vibetraderbackend.llm.LlmRequest;
 import ru.javaboys.vibetraderbackend.llm.LlmService;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -42,8 +38,6 @@ public class ChatAsyncProcessor {
     private final UserAsyncTaskRepository taskRepository;
     private final DialogRepository dialogRepository;
     private final PromptRepository promptRepository;
-
-    private final PromptsProcessingProperties props;
 
     private final AccountsServiceTools accountsTools;
     private final AssetsServiceTools assetsTools;
@@ -72,39 +66,30 @@ public class ChatAsyncProcessor {
             if (hadCsv) {
                 List<Prompt> prompts = promptRepository.findByChatMessage_Id(userMessageId);
                 if (!prompts.isEmpty()) {
-                    int parallelism = Math.max(1, props.getParallelism());
-                    log.info("Processing {} prompts with parallelism={}", prompts.size(), parallelism);
-
-                    List<CompletableFuture<Void>> futures = new ArrayList<>();
+                    log.info("Processing {} prompts sequentially", prompts.size());
                     for (Prompt p : prompts) {
                         final String promptUid = p.getUid();
                         final String question = p.getQuestion() == null ? "" : p.getQuestion();
-                        CompletableFuture<Void> f = CompletableFuture.runAsync(() -> {
-                            AssistantMessageContextHolder.set(assistantMessageSaved);
-                            try {
-                                String user = """
-                                        promptUid: {uid}
-                                        question: {q}
-                                        """;
-                                llmService.call(
-                                        LlmRequest.builder()
-                                                .conversationId(String.valueOf(dialogId))
-                                                .systemMessage(PromptTemplates.SYSTEM_MAPPING)
-                                                .userMessage(user)
-                                                .userVariables(Map.of("uid", promptUid, "q", question))
-                                                .tools(tools)
-                                                .build()
-                                );
-                            } finally {
-                                AssistantMessageContextHolder.clear();
-                            }
-                        });
-                        futures.add(f);
+                        AssistantMessageContextHolder.set(assistantMessageSaved);
+                        try {
+                            String user = """
+                                    promptUid: {uid}
+                                    question: {q}
+                                    """;
+                            llmService.call(
+                                    LlmRequest.builder()
+                                            .conversationId(String.valueOf(dialogId))
+                                            .systemMessage(PromptTemplates.SYSTEM_MAPPING)
+                                            .userMessage(user)
+                                            .userVariables(Map.of("uid", promptUid, "q", question))
+                                            .tools(tools)
+                                            .build()
+                            );
+                        } finally {
+                            AssistantMessageContextHolder.clear();
+                        }
                     }
-                    for (CompletableFuture<Void> f : futures) {
-                        f.join();
-                    }
-                    log.info("All {} prompts processed", prompts.size());
+                    log.info("All {} prompts processed sequentially", prompts.size());
                 } else {
                     log.info("No prompts found for userMessage {}. Skipping mapping mode.", userMessageId);
                 }

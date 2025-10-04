@@ -11,9 +11,10 @@ import ru.javaboys.vibetraderbackend.chat.model.Prompt;
 import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
 import ru.javaboys.vibetraderbackend.chat.service.SubmissionService;
 
-import java.util.ArrayList;
+import java.net.URI;
+import java.util.Collection;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.StringJoiner;
 
 public class FinamApiSubmissionInterceptor implements RequestInterceptor {
 
@@ -38,9 +39,8 @@ public class FinamApiSubmissionInterceptor implements RequestInterceptor {
         String method = template.method() != null ? template.method() : "GET";
         HttpMethodType type = mapMethod(method);
 
-        String path = normalizePath(template.path());
-        String query = buildQuery(template.queries());
-        String request = query == null || query.isBlank() ? path : (path + "?" + query);
+        // Build request path + query without host
+        String request = buildPathAndQuery(template);
 
         Prompt prompt = promptRepository.findByUid(promptUid).orElse(null);
         if (prompt == null) {
@@ -48,8 +48,65 @@ public class FinamApiSubmissionInterceptor implements RequestInterceptor {
         }
 
         submissionService.upsertByPromtUid(promptUid, type, request, prompt, assistant);
+    }
 
-        template.header("X-Prompt-Uid", promptUid);
+    private String buildPathAndQuery(RequestTemplate template) {
+        String url = template.feignTarget().url() + template.url();
+        String pathAndQuery;
+        if (url == null || url.isBlank()) {
+            pathAndQuery = "/";
+        } else if (url.startsWith("http://") || url.startsWith("https://")) {
+            // absolute URL, strip scheme/host
+            try {
+                URI uri = URI.create(url);
+                String path = uri.getRawPath();
+                String query = uri.getRawQuery();
+                if (path == null || path.isBlank()) {
+                    path = "/";
+                }
+                pathAndQuery = query == null ? path : path + "?" + query;
+            } catch (IllegalArgumentException e) {
+                // fallback to best-effort: remove scheme and host manually
+                int idx = url.indexOf("//");
+                if (idx > -1) {
+                    int slash = url.indexOf('/', idx + 2);
+                    pathAndQuery = slash >= 0 ? url.substring(slash) : "/";
+                } else {
+                    pathAndQuery = url.startsWith("/") ? url : "/" + url;
+                }
+            }
+        } else {
+            pathAndQuery = url.startsWith("/") ? url : "/" + url;
+        }
+
+        // If there is no query in the URL, try to append from template.queries()
+        if (!pathAndQuery.contains("?")) {
+            Map<String, Collection<String>> queries = template.queries();
+            if (queries != null && !queries.isEmpty()) {
+                StringJoiner sj = new StringJoiner("&");
+                for (Map.Entry<String, Collection<String>> e : queries.entrySet()) {
+                    String key = e.getKey();
+                    Collection<String> values = e.getValue();
+                    if (values == null || values.isEmpty()) {
+                        sj.add(key);
+                    } else {
+                        for (String v : values) {
+                            // values are assumed already encoded by Feign or provided as-is
+                            sj.add(key + "=" + (v == null ? "" : v));
+                        }
+                    }
+                }
+                String q = sj.toString();
+                if (!q.isEmpty()) {
+                    pathAndQuery = pathAndQuery + "?" + q;
+                }
+            }
+        }
+        // Ensure it starts with '/'
+        if (!pathAndQuery.startsWith("/")) {
+            pathAndQuery = "/" + pathAndQuery;
+        }
+        return pathAndQuery;
     }
 
     private HttpMethodType mapMethod(String m) {
@@ -58,22 +115,5 @@ public class FinamApiSubmissionInterceptor implements RequestInterceptor {
         } catch (Exception ignore) {
             return HttpMethodType.GET;
         }
-    }
-
-    private String normalizePath(String p) {
-        if (p == null || p.isBlank()) return "/";
-        return p.startsWith("/") ? p : "/" + p;
-    }
-
-    private String buildQuery(Map<String, java.util.Collection<String>> queries) {
-        if (queries == null || queries.isEmpty()) return "";
-        var parts = new ArrayList<>(queries.entrySet());
-        parts.sort(Map.Entry.comparingByKey());
-        return parts.stream()
-                .flatMap(e -> {
-                    String key = e.getKey();
-                    return e.getValue().stream().map(v -> key + "=" + v);
-                })
-                .collect(Collectors.joining("&"));
     }
 }
