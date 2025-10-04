@@ -5,16 +5,32 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import ru.javaboys.vibetraderbackend.chat.model.*;
+import ru.javaboys.vibetraderbackend.agent.PromptTemplates;
+import ru.javaboys.vibetraderbackend.agent.ctx.AssistantMessageContextHolder;
+import ru.javaboys.vibetraderbackend.agent.tools.AccountsServiceTools;
+import ru.javaboys.vibetraderbackend.agent.tools.AssetsServiceTools;
+import ru.javaboys.vibetraderbackend.agent.tools.AuthServiceTools;
+import ru.javaboys.vibetraderbackend.agent.tools.ExchangesServiceTools;
+import ru.javaboys.vibetraderbackend.agent.tools.InstrumentsServiceTools;
+import ru.javaboys.vibetraderbackend.chat.model.ChatMessage;
+import ru.javaboys.vibetraderbackend.chat.model.Dialog;
+import ru.javaboys.vibetraderbackend.chat.model.MessageRole;
+import ru.javaboys.vibetraderbackend.chat.model.Prompt;
+import ru.javaboys.vibetraderbackend.chat.model.TaskStatus;
+import ru.javaboys.vibetraderbackend.chat.model.UserAsyncTask;
 import ru.javaboys.vibetraderbackend.chat.repository.ChatMessageRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.DialogRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.UserAsyncTaskRepository;
+import ru.javaboys.vibetraderbackend.config.PromptsProcessingProperties;
 import ru.javaboys.vibetraderbackend.llm.LlmRequest;
 import ru.javaboys.vibetraderbackend.llm.LlmService;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -26,7 +42,13 @@ public class ChatAsyncProcessor {
     private final UserAsyncTaskRepository taskRepository;
     private final DialogRepository dialogRepository;
     private final PromptRepository promptRepository;
-    private final SubmissionService submissionService;
+
+    private final PromptsProcessingProperties props;
+
+    private final AccountsServiceTools accountsTools;
+    private final AssetsServiceTools assetsTools;
+    private final InstrumentsServiceTools instrumentsTools;
+    private final ExchangesServiceTools exchangesTools;
 
     @Async("taskExecutor")
     @Transactional
@@ -37,41 +59,63 @@ public class ChatAsyncProcessor {
         Dialog dialog = dialogRepository.findById(dialogId)
                 .orElseThrow(() -> new IllegalArgumentException("Dialog not found: " + dialogId));
         try {
-            // Simulate LLM processing time
-            try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
-
-            String answer = llmService.call(LlmRequest.builder()
-                    .conversationId(String.valueOf(dialogId))
-                    .userMessage(userContent)
-                    .build());
-
             ChatMessage assistantMessage = ChatMessage.builder()
                     .dialog(dialog)
                     .task(task)
                     .role(MessageRole.ASSISTANT)
-                    .content(answer)
+                    .content("Готовлю ответ и формирую submission.csv ...")
                     .build();
-            assistantMessage = chatMessageRepository.save(assistantMessage);
+            var assistantMessageSaved = chatMessageRepository.save(assistantMessage);
 
-            // If CSV was uploaded for the triggering user message, create submissions
+            List<Object> tools = List.of(accountsTools, assetsTools, instrumentsTools, exchangesTools);
+
             if (hadCsv) {
                 List<Prompt> prompts = promptRepository.findByChatMessage_Id(userMessageId);
                 if (!prompts.isEmpty()) {
+                    int parallelism = Math.max(1, props.getParallelism());
+                    log.info("Processing {} prompts with parallelism={}", prompts.size(), parallelism);
+
+                    List<CompletableFuture<Void>> futures = new ArrayList<>();
                     for (Prompt p : prompts) {
-                        String req = (p.getQuestion() != null && p.getQuestion().startsWith("/"))
-                                ? p.getQuestion() : "/submissions/" + p.getUid();
-                        submissionService.upsertByPromtUid(
-                                p.getUid(),
-                                HttpMethodType.GET,
-                                req,
-                                p,
-                                assistantMessage
-                        );
+                        final String promptUid = p.getUid();
+                        final String question = p.getQuestion() == null ? "" : p.getQuestion();
+                        CompletableFuture<Void> f = CompletableFuture.runAsync(() -> {
+                            AssistantMessageContextHolder.set(assistantMessageSaved);
+                            try {
+                                String user = """
+                                        promptUid: {uid}
+                                        question: {q}
+                                        """;
+                                llmService.call(
+                                        LlmRequest.builder()
+                                                .conversationId(String.valueOf(dialogId))
+                                                .systemMessage(PromptTemplates.SYSTEM_MAPPING)
+                                                .userMessage(user)
+                                                .userVariables(Map.of("uid", promptUid, "q", question))
+                                                .tools(tools)
+                                                .build()
+                                );
+                            } finally {
+                                AssistantMessageContextHolder.clear();
+                            }
+                        });
+                        futures.add(f);
                     }
-                    log.info("Created/updated {} submissions for assistantMessage {}", prompts.size(), assistantMessage.getId());
+                    for (CompletableFuture<Void> f : futures) {
+                        f.join();
+                    }
+                    log.info("All {} prompts processed", prompts.size());
                 } else {
-                    log.info("No prompts found for userMessage {}. Skipping submissions.", userMessageId);
+                    log.info("No prompts found for userMessage {}. Skipping mapping mode.", userMessageId);
                 }
+            } else {
+                String answer = llmService.call(LlmRequest.builder()
+                        .conversationId(String.valueOf(dialogId))
+                        .userMessage(userContent == null ? "" : userContent)
+                        .tools(tools)
+                        .build());
+                assistantMessage.setContent(answer);
+                chatMessageRepository.save(assistantMessage);
             }
 
             task.setStatus(TaskStatus.DONE);

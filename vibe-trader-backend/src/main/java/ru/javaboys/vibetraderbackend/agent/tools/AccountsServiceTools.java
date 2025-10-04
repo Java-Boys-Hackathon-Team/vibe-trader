@@ -49,7 +49,7 @@ public class AccountsServiceTools {
             Возвращает полную информацию по торговому счёту.
             Используй, когда нужно получить детальную информацию по счёту.
             """)
-    public AccountResponse getAccount(
+    public AccountResponse getAccountById(
             @ToolParam(description = """
                     Служебный UID запроса; передай как есть, строкой.
                     """) String promptUid,
