@@ -1,9 +1,11 @@
 package ru.javaboys.vibetraderbackend.chat.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import ru.javaboys.vibetraderbackend.chat.dto.*;
 import ru.javaboys.vibetraderbackend.chat.model.ChatMessage;
 import ru.javaboys.vibetraderbackend.chat.model.Dialog;
@@ -56,9 +58,18 @@ public class AiChatController {
                 .collect(Collectors.toList());
     }
 
+    // Existing JSON endpoint kept for backward compatibility
     @PostMapping("/dialogs/{dialogId}/messages")
     public SendMessageResponse sendMessage(@PathVariable Long dialogId, @RequestBody @Validated SendMessageRequest request) {
         return chatService.sendUserMessage(dialogId, request.getContent());
+    }
+
+    // New endpoint variant to support optional file upload along with other data
+    @PostMapping(value = "/dialogs/{dialogId}/messages", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public SendMessageResponse sendMessageWithFile(@PathVariable Long dialogId,
+                                                   @RequestPart("data") @Validated SendMessageRequest request,
+                                                   @RequestPart(value = "file", required = false) MultipartFile file) {
+        return chatService.sendUserMessage(dialogId, request.getContent(), file);
     }
 
     @GetMapping("/tasks/{taskId}")

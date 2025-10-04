@@ -1,8 +1,12 @@
 package ru.javaboys.vibetraderbackend.chat.service;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 import ru.javaboys.vibetraderbackend.chat.dto.SendMessageResponse;
 import ru.javaboys.vibetraderbackend.chat.model.*;
 import ru.javaboys.vibetraderbackend.chat.repository.ChatMessageRepository;
@@ -14,6 +18,8 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class ChatService {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     private final DialogRepository dialogRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -61,6 +67,23 @@ public class ChatService {
                 .userMessageId(userMessage.getId())
                 .status(task.getStatus())
                 .build();
+    }
+
+    @Transactional
+    public SendMessageResponse sendUserMessage(Long dialogId, String content, MultipartFile file) {
+        if (file != null && !file.isEmpty()) {
+            String filename = file.getOriginalFilename();
+            String ext = (filename != null) ? StringUtils.getFilenameExtension(filename) : null;
+            if (ext != null && ext.equalsIgnoreCase("csv")) {
+                log.info("Accepted CSV file '{}' for dialog {}", filename, dialogId);
+            } else {
+                log.info("Accepted file '{}' (ext={}) for dialog {}", filename, ext, dialogId);
+            }
+        } else {
+            log.debug("No file provided for dialog {}", dialogId);
+        }
+        // Delegate to the primary method to keep persistence and async behavior consistent
+        return sendUserMessage(dialogId, content);
     }
 
     @Transactional(readOnly = true)
