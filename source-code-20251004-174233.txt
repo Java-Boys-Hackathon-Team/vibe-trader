@@ -1,0 +1,1949 @@
+
+
+===== FILE: client/FinamClient.java =====
+package ru.javaboys.vibetraderbackend.finam.client;
+
+import org.springframework.stereotype.Service;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import ru.javaboys.vibetraderbackend.finam.client.api.AccountsApiV1;
+import ru.javaboys.vibetraderbackend.finam.client.api.AssetsApiV1;
+import ru.javaboys.vibetraderbackend.finam.client.api.ExchangesApiV1;
+import ru.javaboys.vibetraderbackend.finam.client.api.InstrumentsApiV1;
+import ru.javaboys.vibetraderbackend.finam.client.api.SessionsApiV1;
+
+@Getter
+@Service
+@RequiredArgsConstructor
+public class FinamClient {
+    private final AccountsApiV1 accountsApi;
+    private final AssetsApiV1 assetsApi;
+    private final ExchangesApiV1 exchangesApi;
+    private final InstrumentsApiV1 instrumentsApi;
+    private final SessionsApiV1 sessionsApi;
+
+}
+
+
+===== FILE: client/FinamClientAuthInterceptor.java =====
+package ru.javaboys.vibetraderbackend.finam.client;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+
+import feign.RequestInterceptor;
+import feign.RequestTemplate;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import ru.javaboys.vibetraderbackend.finam.client.api.SessionsApiV1;
+import ru.javaboys.vibetraderbackend.finam.dto.auth.AuthRequest;
+import ru.javaboys.vibetraderbackend.finam.dto.auth.AuthResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsRequest;
+import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsResponse;
+
+@Slf4j
+@RequiredArgsConstructor
+public class FinamClientAuthInterceptor implements RequestInterceptor {
+    private final SessionsApiV1 SessionsApi;
+    private final String secret;
+
+    private TokenInfo tokenInfo;
+
+    @Override
+    public void apply(RequestTemplate requestTemplate) {
+        String token = getTokenInfo().getToken();
+        requestTemplate.header("Authorization", token);
+    }
+
+    private TokenInfo getTokenInfo() {
+        if (tokenInfo == null || tokenInfo.getExpiresAt().minus(3, ChronoUnit.MINUTES).isAfter(Instant.now())) {
+            log.info("Requesting new token, old tokenInfo: {}", tokenInfo);
+            AuthResponse token = SessionsApi.auth(AuthRequest.builder().secret(secret).build());
+            TokenDetailsResponse tokenResponse = SessionsApi.tokenDetails(TokenDetailsRequest.builder().token(token.getToken()).build());
+            tokenInfo = new TokenInfo(token.getToken(), tokenResponse.getExpiresAt());
+        }
+
+        log.info("Using current token, tokenInfo: {}", tokenInfo);
+        return tokenInfo;
+    }
+
+}
+
+
+===== FILE: client/FinamClientConfiguration.java =====
+package ru.javaboys.vibetraderbackend.finam.client;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import feign.Logger;
+import feign.RequestInterceptor;
+import ru.javaboys.vibetraderbackend.finam.client.api.SessionsApiV1;
+
+@Configuration
+public class FinamClientConfiguration {
+
+    @Bean
+    public Logger.Level feignLoggerLevel() {
+        return Logger.Level.FULL;
+    }
+
+    @Bean
+    public RequestInterceptor apiKeyRequestInterceptor(
+            SessionsApiV1 sessionsApi,
+            @Value("${finam-api.secret}") String secret
+    ) {
+        return new FinamClientAuthInterceptor(sessionsApi, secret);
+    }
+
+}
+
+
+===== FILE: client/TokenInfo.java =====
+package ru.javaboys.vibetraderbackend.finam.client;
+
+import java.time.Instant;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class TokenInfo {
+    private final String token;
+    private final Instant expiresAt;
+
+}
+
+
+===== FILE: client/api/AccountsApiV1.java =====
+package ru.javaboys.vibetraderbackend.finam.client.api;
+
+import java.time.Instant;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import ru.javaboys.vibetraderbackend.finam.client.FinamClientConfiguration;
+import ru.javaboys.vibetraderbackend.finam.dto.account.AccountResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.account.OrderStateResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.account.OrdersResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.account.PlaceOrderRequest;
+import ru.javaboys.vibetraderbackend.finam.dto.trade.TradesResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.transaction.TransactionsResponse;
+
+@FeignClient(
+        name = "finam-accounts-api",
+        url = "${finam-api.url}/v1/accounts",
+        configuration = FinamClientConfiguration.class
+)
+public interface AccountsApiV1 {
+
+    @GetMapping(value = "/{accountId}")
+    AccountResponse account(
+            @PathVariable("accountId") String accountId
+    );
+
+    @GetMapping(value = "/{accountId}/trades")
+    TradesResponse trades(
+            @PathVariable("accountId") String accountId,
+            @RequestParam("interval.start_time") Instant startTime,
+            @RequestParam("interval.end_time") Instant endTime,
+            @RequestParam("limit") Long limit
+    );
+
+    @GetMapping(value = "/{accountId}/transactions")
+    TransactionsResponse transactions(
+            @PathVariable("accountId") String accountId,
+            @RequestParam("interval.start_time") Instant startTime,
+            @RequestParam("interval.end_time") Instant endTime
+    );
+
+    @PostMapping(value = "/{accountId}/orders")
+    OrderStateResponse placeOrder(
+            @PathVariable("accountId") String accountId,
+            @RequestBody PlaceOrderRequest request
+    );
+
+    @GetMapping(value = "/{accountId}/orders/{orderId}")
+    OrderStateResponse order(
+            @PathVariable("accountId") String accountId,
+            @PathVariable("orderId") String orderId
+    );
+
+    @GetMapping(value = "/{accountId}/orders")
+    OrdersResponse orders(
+            @PathVariable("accountId") String accountId
+    );
+
+    @DeleteMapping(value = "/{accountId}/orders/{orderId}")
+    OrderStateResponse cancelOrder(
+            @PathVariable("accountId") String accountId,
+            @PathVariable("orderId") String orderId
+    );
+
+}
+
+
+===== FILE: client/api/AssetsApiV1.java =====
+package ru.javaboys.vibetraderbackend.finam.client.api;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import ru.javaboys.vibetraderbackend.finam.client.FinamClientConfiguration;
+import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetOptionResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetParamResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetScheduleResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.asset.AssetsResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.asset.ClockResponse;
+
+@FeignClient(
+        name = "finam-assets-api",
+        url = "${finam-api.url}/v1/assets",
+        configuration = FinamClientConfiguration.class
+)
+public interface AssetsApiV1 {
+
+    @GetMapping(value = "")
+    AssetsResponse assets();
+
+    @GetMapping(value = "/{symbol}")
+    AssetResponse asset(
+            @PathVariable("symbol") String symbol,
+            @RequestParam("account_id") String accountId
+    );
+
+    @GetMapping(value = "/{symbol}/params")
+    AssetParamResponse param(
+            @PathVariable("symbol") String symbol,
+            @RequestParam("account_id") String accountId
+    );
+
+    @GetMapping(value = "/{symbol}/options")
+    AssetOptionResponse option(
+            @PathVariable("symbol") String symbol
+    );
+
+    @GetMapping(value = "/{symbol}/schedule")
+    AssetScheduleResponse schedule(
+            @PathVariable("symbol") String symbol
+    );
+
+    @GetMapping(value = "/clock")
+    ClockResponse clock();
+
+}
+
+
+===== FILE: client/api/ExchangesApiV1.java =====
+package ru.javaboys.vibetraderbackend.finam.client.api;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+
+import ru.javaboys.vibetraderbackend.finam.client.FinamClientConfiguration;
+import ru.javaboys.vibetraderbackend.finam.dto.exchange.ExchangesResponse;
+
+@FeignClient(
+        name = "finam-exchanges-api",
+        url = "${finam-api.url}/v1/exchanges",
+        configuration = FinamClientConfiguration.class
+)
+public interface ExchangesApiV1 {
+
+    @GetMapping(value = "")
+    ExchangesResponse exchanges();
+
+}
+
+
+===== FILE: client/api/InstrumentsApiV1.java =====
+package ru.javaboys.vibetraderbackend.finam.client.api;
+
+import java.time.Instant;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import ru.javaboys.vibetraderbackend.finam.client.FinamClientConfiguration;
+import ru.javaboys.vibetraderbackend.finam.dto.instrument.BarsResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.instrument.LasestOrderBookResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.instrument.LatestTradesResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.instrument.QuoteResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.instrument.TimeFrameType;
+
+@FeignClient(
+        name = "finam-instruments-api",
+        url = "${finam-api.url}/v1/instruments",
+        configuration = FinamClientConfiguration.class
+)
+public interface InstrumentsApiV1 {
+
+    @GetMapping(value = "/{symbol}/bars")
+    BarsResponse bars(
+            @PathVariable("symbol") String symbol,
+            @RequestParam("interval.start_time") Instant startTime,
+            @RequestParam("interval.end_time") Instant endTime,
+            @RequestParam("timeframe") TimeFrameType timeframe
+    );
+
+    @GetMapping(value = "/{symbol}/quotes/latest")
+    QuoteResponse latestQuote(
+            @PathVariable("symbol") String symbol
+    );
+
+    @GetMapping(value = "/{symbol}/trades/latest")
+    LatestTradesResponse latestTrades(
+            @PathVariable("symbol") String symbol
+    );
+
+    @GetMapping(value = "/{symbol}/orderbook")
+    LasestOrderBookResponse latestOrderBook(
+            @PathVariable("symbol") String symbol
+    );
+
+}
+
+
+===== FILE: client/api/SessionsApiV1.java =====
+package ru.javaboys.vibetraderbackend.finam.client.api;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+
+import ru.javaboys.vibetraderbackend.finam.dto.auth.AuthRequest;
+import ru.javaboys.vibetraderbackend.finam.dto.auth.AuthResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsRequest;
+import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsResponse;
+
+@FeignClient(
+        name = "finam-sessions-api",
+        url = "${finam-api.url}/v1/sessions"
+)
+public interface SessionsApiV1 {
+
+    @PostMapping(value = "")
+    AuthResponse auth(
+            @RequestBody AuthRequest request
+    );
+
+    @PostMapping(value = "/details")
+    TokenDetailsResponse tokenDetails(
+            @RequestBody TokenDetailsRequest request
+    );
+
+}
+
+
+===== FILE: dto/BigDecimalValueWrapper.java =====
+package ru.javaboys.vibetraderbackend.finam.dto;
+
+import java.math.BigDecimal;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class BigDecimalValueWrapper {
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    @JsonProperty("value")
+    private final BigDecimal value;
+
+    public static BigDecimalValueWrapper valueOf(long value) {
+        return BigDecimalValueWrapper.builder()
+                .value(BigDecimal.valueOf(value))
+                .build();
+    }
+
+    public static BigDecimalValueWrapper valueOf(double value) {
+        return BigDecimalValueWrapper.builder()
+                .value(BigDecimal.valueOf(value))
+                .build();
+    }
+
+}
+
+===== FILE: dto/DateValue.java =====
+package ru.javaboys.vibetraderbackend.finam.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class DateValue {
+
+    @JsonProperty("year")
+    private final Integer year;
+
+    @JsonProperty("month")
+    private final Integer month;
+
+    @JsonProperty("day")
+    private final Integer day;
+
+}
+
+===== FILE: dto/account/AccountResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class AccountResponse {
+
+    @JsonProperty("account_id")
+    private final String accountId;
+
+    @JsonProperty("type")
+    private final String type;
+
+    @JsonProperty("status")
+    private final String status;
+
+    @JsonProperty("equity")
+    private final BigDecimalValueWrapper equity;
+
+    @JsonProperty("unrealized_profit")
+    private final BigDecimalValueWrapper unrealizedProfit;
+
+    @JsonProperty("positions")
+    private final List<Position> positions;
+
+    @JsonProperty("cash")
+    private final List<Cash> cash;
+
+    @JsonProperty("portfolio_mc")
+    private final PortfolioMc portfolioMc;
+
+}
+
+===== FILE: dto/account/Cash.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class Cash {
+
+    @JsonProperty("currency_code")
+    private final String currencyCode;
+
+    @JsonProperty("units")
+    private final String units;
+
+    @JsonProperty("nanos")
+    private final Long nanos;
+
+}
+
+===== FILE: dto/account/CloseOrderResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class CloseOrderResponse {
+
+    @JsonProperty("order_id")
+    private final String orderId;
+
+    @JsonProperty("exec_id")
+    private final String execId;
+
+    @JsonProperty("status")
+    private final String status;
+
+    @JsonProperty("order")
+    private final Order order;
+
+    @JsonProperty("transact_at")
+    private final String transactAt;
+
+}
+
+===== FILE: dto/account/Order.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class Order {
+
+    @JsonProperty("account_id")
+    private final String accountId;
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("quantity")
+    private final BigDecimalValueWrapper quantity;
+
+    @JsonProperty("side")
+    private final String side;
+
+    @JsonProperty("type")
+    private final OrderType type;
+
+    @JsonProperty("time_in_force")
+    private final String timeInForce;
+
+    @JsonProperty("limit_price")
+    private final BigDecimalValueWrapper limitPrice;
+
+    @JsonProperty("stop_condition")
+    private final String stopCondition;
+
+    @JsonProperty("legs")
+    private final List<Object> legs;
+
+    @JsonProperty("client_order_id")
+    private final String clientOrderId;
+
+    @JsonProperty("valid_before")
+    private final ValidBeforeType validBefore;
+
+}
+
+===== FILE: dto/account/OrderLeg.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class OrderLeg {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("quantity")
+    private final BigDecimalValueWrapper quantity;
+
+    @JsonProperty("side")
+    private final String side;
+
+}
+
+
+===== FILE: dto/account/OrderResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class OrderResponse {
+
+    @JsonProperty("order_id")
+    private final String orderId;
+
+    @JsonProperty("exec_id")
+    private final String execId;
+
+    @JsonProperty("status")
+    private final String status;
+
+    @JsonProperty("order")
+    private final Order order;
+
+    @JsonProperty("transact_at")
+    private final String transactAt;
+
+}
+
+===== FILE: dto/account/OrderState.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class OrderState {
+
+    @JsonProperty("order_id")
+    private final String orderId;
+
+    @JsonProperty("exec_id")
+    private final String execId;
+
+    @JsonProperty("status")
+    private final OrderStatusType status;
+
+    @JsonProperty("order")
+    private final Order order;
+
+    @JsonProperty("transact_at")
+    private final String transactAt;
+
+    @JsonProperty("accept_at")
+    private final String acceptAt;
+
+    @JsonProperty("withdraw_at")
+    private final String withdrawAt;
+
+}
+
+
+===== FILE: dto/account/OrderStateResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class OrderStateResponse {
+
+    @JsonProperty("order_id")
+    private final String orderId;
+
+    @JsonProperty("exec_id")
+    private final String execId;
+
+    @JsonProperty("status")
+    private final OrderStatusType status;
+
+    @JsonProperty("order")
+    private final Order order;
+
+    @JsonProperty("transact_at")
+    private final String transactAt;
+
+    @JsonProperty("accept_at")
+    private final String acceptAt;
+
+    @JsonProperty("withdraw_at")
+    private final String withdrawAt;
+}
+
+===== FILE: dto/account/OrderStatusType.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum OrderStatusType {
+    ORDER_STATUS_UNSPECIFIED(0),
+    ORDER_STATUS_NEW(1),
+    ORDER_STATUS_PARTIALLY_FILLED(2),
+    ORDER_STATUS_FILLED(3),
+    ORDER_STATUS_DONE_FOR_DAY(4),
+    ORDER_STATUS_CANCELED(5),
+    ORDER_STATUS_REPLACED(6),
+    ORDER_STATUS_PENDING_CANCEL(7),
+    ORDER_STATUS_REJECTED(9),
+    ORDER_STATUS_SUSPENDED(10),
+    ORDER_STATUS_PENDING_NEW(11),
+    ORDER_STATUS_EXPIRED(13),
+    ORDER_STATUS_FAILED(16),
+    ORDER_STATUS_FORWARDING(17),
+    ORDER_STATUS_WAIT(18),
+    ORDER_STATUS_DENIED_BY_BROKER(19),
+    ORDER_STATUS_REJECTED_BY_EXCHANGE(20),
+    ORDER_STATUS_WATCHING(21),
+    ORDER_STATUS_EXECUTED(22),
+    ORDER_STATUS_DISABLED(23),
+    ORDER_STATUS_LINK_WAIT(24),
+    ORDER_STATUS_SL_GUARD_TIME(27),
+    ORDER_STATUS_SL_EXECUTED(28),
+    ORDER_STATUS_SL_FORWARDING(29),
+    ORDER_STATUS_TP_GUARD_TIME(30),
+    ORDER_STATUS_TP_EXECUTED(31),
+    ORDER_STATUS_TP_CORRECTION(32),
+    ORDER_STATUS_TP_FORWARDING(33),
+    ORDER_STATUS_TP_CORR_GUARD_TIME(34)
+    ;
+
+    private final Integer code;
+
+}
+
+
+===== FILE: dto/account/OrderType.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum OrderType {
+    ORDER_TYPE_UNSPECIFIED(0),
+    ORDER_TYPE_MARKET(1),
+    ORDER_TYPE_LIMIT(2),
+    ORDER_TYPE_STOP(3),
+    ORDER_TYPE_STOP_LIMIT(4),
+    ORDER_TYPE_MULTI_LEG(5)
+    ;
+
+    private final Integer code;
+
+}
+
+
+===== FILE: dto/account/OrdersResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class OrdersResponse {
+
+    @JsonProperty("orders")
+    private final List<OrderState> orders;
+
+}
+
+
+===== FILE: dto/account/PlaceOrderRequest.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import java.util.List;
+
+import javax.validation.constraints.Size;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class PlaceOrderRequest {
+
+    @JsonProperty("account_id")
+    private final String accountId;
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("quantity")
+    private final BigDecimalValueWrapper quantity;
+
+    @JsonProperty("side")
+    private final String side;// todo make enum?
+
+    @JsonProperty("type")
+    private final OrderType type;
+
+    @JsonProperty("time_in_force")
+    private final TimeInForceType timeInForce;
+
+    @JsonProperty("limit_price")
+    private final BigDecimalValueWrapper limitPrice;
+
+    @JsonProperty("stop_price")
+    private final BigDecimalValueWrapper stopPrice;
+
+    @JsonProperty("stop_condition")
+    private final StopConditionType stopCondition;
+
+    @JsonProperty("legs")
+    private final List<OrderLeg> legs;
+
+    @Size(min = 1, max = 20)
+    @JsonProperty("client_order_id")
+    private final String clientOrderId;
+
+    @JsonProperty("valid_before")
+    private final ValidBeforeType validBefore;
+
+    @JsonProperty("comment")
+    private final String comment;
+
+}
+
+===== FILE: dto/account/PlaceOrderResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class PlaceOrderResponse {
+
+    @JsonProperty("order_id")
+    private final String orderId;
+
+    @JsonProperty("exec_id")
+    private final String execId;
+
+    @JsonProperty("status")
+    private final String status;
+
+    @JsonProperty("order")
+    private final Order order;
+
+    @JsonProperty("transact_at")
+    private final String transactAt;
+
+}
+
+===== FILE: dto/account/PortfolioMc.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class PortfolioMc {
+
+    @JsonProperty("available_cash")
+    private final BigDecimalValueWrapper availableCash;
+
+    @JsonProperty("initial_margin")
+    private final BigDecimalValueWrapper initialMargin;
+
+    @JsonProperty("maintenance_margin")
+    private final BigDecimalValueWrapper maintenanceMargin;
+
+}
+
+===== FILE: dto/account/Position.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class Position {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("quantity")
+    private final BigDecimalValueWrapper quantity;
+
+    @JsonProperty("average_price")
+    private final BigDecimalValueWrapper averagePrice;
+
+    @JsonProperty("current_price")
+    private final BigDecimalValueWrapper currentPrice;
+
+    @JsonProperty("maintenance_margin")
+    private final BigDecimalValueWrapper maintenanceMargin;
+
+    @JsonProperty("daily_pnl")
+    private final BigDecimalValueWrapper dailyPnl;
+
+    @JsonProperty("unrealized_pnl")
+    private final BigDecimalValueWrapper unrealizedPnl;
+
+}
+
+===== FILE: dto/account/StopConditionType.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum StopConditionType {
+    STOP_CONDITION_UNSPECIFIED(0),
+    STOP_CONDITION_LAST_UP(1),
+    STOP_CONDITION_LAST_DOWN(2)
+    ;
+
+    private final Integer code;
+
+}
+
+
+===== FILE: dto/account/TimeInForceType.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum TimeInForceType {
+    TIME_IN_FORCE_UNSPECIFIED(0),
+    TIME_IN_FORCE_DAY(1),
+    TIME_IN_FORCE_GOOD_TILL_CANCEL(2),
+    TIME_IN_FORCE_GOOD_TILL_CROSSING(3),
+    TIME_IN_FORCE_EXT(4),
+    TIME_IN_FORCE_ON_OPEN(5),
+    TIME_IN_FORCE_ON_CLOSE(6),
+    TIME_IN_FORCE_IOC(7),
+    TIME_IN_FORCE_FOK(8)
+    ;
+
+    private final Integer code;
+
+}
+
+
+===== FILE: dto/account/ValidBeforeType.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.account;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum ValidBeforeType {
+    VALID_BEFORE_UNSPECIFIED(0),
+    VALID_BEFORE_END_OF_DAY(1),
+    VALID_BEFORE_GOOD_TILL_CANCEL(2),
+    VALID_BEFORE_GOOD_TILL_DATE(3)
+    ;
+
+    private final Integer code;
+
+}
+
+
+===== FILE: dto/asset/Asset.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class Asset {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("id")
+    private final String id;
+
+    @JsonProperty("ticker")
+    private final String ticker;
+
+    @JsonProperty("mic")
+    private final String mic;
+
+    @JsonProperty("isin")
+    private final String isin;
+
+    @JsonProperty("type")
+    private final String type;
+
+    @JsonProperty("name")
+    private final String name;
+
+}
+
+===== FILE: dto/asset/AssetOption.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+import ru.javaboys.vibetraderbackend.finam.dto.DateValue;
+
+@Getter
+@Builder
+public class AssetOption {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("type")
+    private final String type;
+
+    @JsonProperty("contract_size")
+    private final BigDecimalValueWrapper contractSize;
+
+    @JsonProperty("trade_last_day")
+    private final DateValue tradeLastDay;
+
+    @JsonProperty("strike")
+    private final BigDecimalValueWrapper strike;
+
+    @JsonProperty("expiration_first_day")
+    private final DateValue expirationFirstDay;
+
+    @JsonProperty("expiration_last_day")
+    private final DateValue expirationLastDay;
+
+}
+
+===== FILE: dto/asset/AssetOptionResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class AssetOptionResponse {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("options")
+    private final List<AssetOption> options;
+
+}
+
+===== FILE: dto/asset/AssetParamResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class AssetParamResponse {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("account_id")
+    private final String accountId;
+
+    @JsonProperty("tradeable")
+    private final Boolean tradeable;
+
+    @JsonProperty("longable")
+    private final Availability longable;
+
+    @JsonProperty("shortable")
+    private final Availability shortable;
+
+    @JsonProperty("long_risk_rate")
+    private final BigDecimalValueWrapper longRiskRate;
+
+    @JsonProperty("long_collateral")
+    private final MoneyValue longCollateral;
+
+    @JsonProperty("short_risk_rate")
+    private final BigDecimalValueWrapper shortRiskRate;
+
+    @JsonProperty("long_initial_margin")
+    private final MoneyValue longInitialMargin;
+
+}
+
+===== FILE: dto/asset/AssetResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class AssetResponse {
+
+    @JsonProperty("board")
+    private final String board;
+
+    @JsonProperty("id")
+    private final String id;
+
+    @JsonProperty("ticker")
+    private final String ticker;
+
+    @JsonProperty("mic")
+    private final String mic;
+
+    @JsonProperty("isin")
+    private final String isin;
+
+    @JsonProperty("type")
+    private final String type;
+
+    @JsonProperty("name")
+    private final String name;
+
+    @JsonProperty("lot_size")
+    private final BigDecimalValueWrapper lotSize;
+
+    @JsonProperty("decimals")
+    private final Integer decimals;
+
+    @JsonProperty("min_step")
+    private final String minStep;
+
+}
+
+===== FILE: dto/asset/AssetScheduleResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class AssetScheduleResponse {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("sessions")
+    private final List<Session> sessions;
+
+}
+
+===== FILE: dto/asset/AssetsResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class AssetsResponse {
+
+    @JsonProperty("assets")
+    private final List<Asset> assets;
+
+}
+
+===== FILE: dto/asset/Availability.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class Availability {
+
+    @JsonProperty("value")
+    private final String value;
+
+    @JsonProperty("halted_days")
+    private final Integer haltedDays;
+
+}
+
+===== FILE: dto/asset/ClockResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import java.time.Instant;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class ClockResponse {
+
+    @JsonProperty("timestamp")
+    private final Instant timestamp;
+
+}
+
+
+===== FILE: dto/asset/Interval.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class Interval {
+
+    @JsonProperty("start_time")
+    private final String startTime;
+
+    @JsonProperty("end_time")
+    private final String endTime;
+
+}
+
+===== FILE: dto/asset/MoneyValue.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class MoneyValue {
+
+    @JsonProperty("currency_code")
+    private final String currencyCode;
+
+    @JsonProperty("units")
+    private final String units;
+
+    @JsonProperty("nanos")
+    private final Integer nanos;
+
+}
+
+===== FILE: dto/asset/Session.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.asset;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class Session {
+
+    @JsonProperty("type")
+    private final String type;
+
+    @JsonProperty("interval")
+    private final Interval interval;
+
+}
+
+===== FILE: dto/auth/AuthRequest.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.auth;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class AuthRequest {
+
+    @JsonProperty("secret")
+    private final String secret;
+
+}
+
+
+===== FILE: dto/auth/AuthResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.auth;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class AuthResponse {
+
+    @JsonProperty("token")
+    private final String token;
+
+}
+
+
+===== FILE: dto/auth/MdPermission.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.auth;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class MdPermission {
+
+    @JsonProperty("quote_level")
+    private final QuoteLevelType quoteLevel;
+
+    @JsonProperty("delay_minutes")
+    private final Long delayMinutes;
+
+    @JsonProperty("mic")
+    private final String mic;
+
+}
+
+
+===== FILE: dto/auth/QuoteLevelType.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.auth;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum QuoteLevelType {
+    QUOTE_LEVEL_UNSPECIFIED(0),
+    QUOTE_LEVEL_LAST_PRICE(1),
+    QUOTE_LEVEL_BEST_BID_OFFER(2),
+    QUOTE_LEVEL_DEPTH_OF_MARKET(3),
+    QUOTE_LEVEL_DEPTH_OF_BOOK(4),
+    QUOTE_LEVEL_ACCESS_FORBIDDEN(5)
+    ;
+
+    private final Integer code;
+
+}
+
+
+===== FILE: dto/auth/TokenDetailsRequest.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.auth;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class TokenDetailsRequest {
+
+    @JsonProperty("token")
+    private final String token;
+
+}
+
+
+===== FILE: dto/auth/TokenDetailsResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.auth;
+
+import java.time.Instant;
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class TokenDetailsResponse {
+
+    @JsonProperty("created_at")
+    private final Instant createdAt;
+
+    @JsonProperty("expires_at")
+    private final Instant expiresAt;
+
+    @JsonProperty("md_permissions")
+    private final List<MdPermission> mdPermissions;
+
+    @JsonProperty("account_ids")
+    private final List<String> accountIds;
+
+    @JsonProperty("readonly")
+    private final Boolean readonly;
+
+}
+
+
+===== FILE: dto/exchange/Exchange.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.exchange;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class Exchange {
+
+    @JsonProperty("mic")
+    private final String mic;
+
+    @JsonProperty("name")
+    private final String name;
+
+}
+
+===== FILE: dto/exchange/ExchangesResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.exchange;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class ExchangesResponse {
+
+    @JsonProperty("exchanges")
+    private final List<Exchange> exchanges;
+
+}
+
+===== FILE: dto/instrument/Bar.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class Bar {
+
+    @JsonProperty("timestamp")
+    private final String timestamp;
+
+    @JsonProperty("open")
+    private final BigDecimalValueWrapper open;
+
+    @JsonProperty("high")
+    private final BigDecimalValueWrapper high;
+
+    @JsonProperty("low")
+    private final BigDecimalValueWrapper low;
+
+    @JsonProperty("close")
+    private final BigDecimalValueWrapper close;
+
+    @JsonProperty("volume")
+    private final BigDecimalValueWrapper volume;
+}
+
+===== FILE: dto/instrument/BarsResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class BarsResponse {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("bars")
+    private final List<Bar> bars;
+
+}
+
+===== FILE: dto/instrument/LasestOrderBookResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class LasestOrderBookResponse {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("orderbook")
+    private final OrderBook orderBook;
+
+}
+
+===== FILE: dto/instrument/LatestTrade.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class LatestTrade {
+
+    @JsonProperty("trade_id")
+    private final String tradeId;
+
+    @JsonProperty("mpid")
+    private final String mpid;
+
+    @JsonProperty("timestamp")
+    private final String timestamp;
+
+    @JsonProperty("price")
+    private final BigDecimalValueWrapper price;
+
+    @JsonProperty("size")
+    private final BigDecimalValueWrapper size;
+
+    @JsonProperty("side")
+    private final String side;
+
+}
+
+===== FILE: dto/instrument/LatestTradesResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class LatestTradesResponse {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("trades")
+    private final List<LatestTrade> trades;
+
+}
+
+===== FILE: dto/instrument/OrderBook.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class OrderBook {
+
+    @JsonProperty("rows")
+    private final List<OrderBookRow> rows;
+
+}
+
+===== FILE: dto/instrument/OrderBookRow.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class OrderBookRow {
+
+    @JsonProperty("price")
+    private final BigDecimalValueWrapper price;
+
+    @JsonProperty("sell_size")
+    private final BigDecimalValueWrapper sellSize;
+
+    @JsonProperty("action")
+    private final String action;
+
+    @JsonProperty("mpid")
+    private final String mpid;
+
+    @JsonProperty("timestamp")
+    private final String timestamp;
+}
+
+===== FILE: dto/instrument/Quote.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class Quote {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("timestamp")
+    private final String timestamp;
+
+    @JsonProperty("ask")
+    private final BigDecimalValueWrapper ask;
+
+    @JsonProperty("ask_size")
+    private final BigDecimalValueWrapper askSize;
+
+    @JsonProperty("bid")
+    private final BigDecimalValueWrapper bid;
+
+    @JsonProperty("bid_size")
+    private final BigDecimalValueWrapper bidSize;
+
+    @JsonProperty("last")
+    private final BigDecimalValueWrapper last;
+
+    @JsonProperty("last_size")
+    private final BigDecimalValueWrapper lastSize;
+
+    @JsonProperty("volume")
+    private final BigDecimalValueWrapper volume;
+
+    @JsonProperty("turnover")
+    private final BigDecimalValueWrapper turnover;
+
+    @JsonProperty("open")
+    private final BigDecimalValueWrapper open;
+
+    @JsonProperty("high")
+    private final BigDecimalValueWrapper high;
+
+    @JsonProperty("low")
+    private final BigDecimalValueWrapper low;
+
+    @JsonProperty("close")
+    private final BigDecimalValueWrapper close;
+
+    @JsonProperty("change")
+    private final BigDecimalValueWrapper change;
+
+}
+
+===== FILE: dto/instrument/QuoteResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class QuoteResponse {
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("quote")
+    private final Quote quote;
+
+}
+
+===== FILE: dto/instrument/TimeFrameType.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.instrument;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum TimeFrameType {
+    TIME_FRAME_UNSPECIFIED(0),
+    TIME_FRAME_M1(1),
+    TIME_FRAME_M5(5),
+    TIME_FRAME_M15(9),
+    TIME_FRAME_M30(11),
+    TIME_FRAME_H1(12),
+    TIME_FRAME_H2(13),
+    TIME_FRAME_H4(15),
+    TIME_FRAME_H8(17),
+    TIME_FRAME_D(19),
+    TIME_FRAME_W(20),
+    TIME_FRAME_MN(21),
+    TIME_FRAME_QR(22)
+    ;
+
+    private final Integer code;
+
+}
+
+
+===== FILE: dto/trade/Trade.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.trade;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class Trade {
+
+    @JsonProperty("trade_id")
+    private final String tradeId;
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("price")
+    private final BigDecimalValueWrapper price;
+
+    @JsonProperty("size")
+    private final BigDecimalValueWrapper size;
+
+    @JsonProperty("side")
+    private final String side;
+
+    @JsonProperty("timestamp")
+    private final String timestamp;
+
+    @JsonProperty("order_id")
+    private final String orderId;
+
+    @JsonProperty("account_id")
+    private final String accountId;
+
+}
+
+
+===== FILE: dto/trade/TradesResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.trade;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class TradesResponse {
+
+    @JsonProperty("trades")
+    private final List<Trade> trades;
+
+}
+
+===== FILE: dto/transaction/Change.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.transaction;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class Change {
+
+    @JsonProperty("currency_code")
+    private final String currencyCode;
+
+    @JsonProperty("units")
+    private final String units;
+
+    @JsonProperty("nanos")
+    private final Integer nanos;
+
+}
+
+===== FILE: dto/transaction/Transaction.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.transaction;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class Transaction {
+
+    @JsonProperty("id")
+    private final String id;
+
+    @JsonProperty("category")
+    private final String category;
+    // todo тоже самое что и TransactionCategoryType ?
+
+    @JsonProperty("timestamp")
+    private final String timestamp;
+
+    @JsonProperty("symbol")
+    private final String symbol;
+
+    @JsonProperty("change")
+    private final Change change;
+
+    @JsonProperty("trade")
+    private final TransactionTrade trade;
+
+    @JsonProperty("transaction_category")
+    private final TransactionCategoryType transactionCategory;
+
+    @JsonProperty("transaction_name")
+    private final String transactionName;
+
+}
+
+===== FILE: dto/transaction/TransactionCategoryType.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.transaction;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum TransactionCategoryType {
+    OTHERS(0),
+    DEPOSIT(1),
+    WITHDRAW(2),
+    INCOME(5),
+    COMMISSION(7),
+    TAX(8),
+    INHERITANCE(9),
+    TRANSFER(11),
+    CONTRACT_TERMINATION(12),
+    OUTCOMES(13),
+    FINE(15),
+    LOAN(19)
+    ;
+
+    private final Integer code;
+
+}
+
+
+===== FILE: dto/transaction/TransactionTrade.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.transaction;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
+
+@Getter
+@Builder
+public class TransactionTrade {
+
+    @JsonProperty("size")
+    private final BigDecimalValueWrapper size;
+
+    @JsonProperty("price")
+    private final BigDecimalValueWrapper price;
+
+    @JsonProperty("accrued_interest")
+    private final BigDecimalValueWrapper accruedInterest;
+
+}
+
+
+===== FILE: dto/transaction/TransactionsResponse.java =====
+package ru.javaboys.vibetraderbackend.finam.dto.transaction;
+
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+public class TransactionsResponse {
+
+    @JsonProperty("transactions")
+    private final List<Transaction> transactions;
+
+}
