@@ -1,19 +1,24 @@
 package ru.javaboys.vibetraderbackend.agent.tools;
 
-import lombok.RequiredArgsConstructor;
+import java.math.BigDecimal;
+import java.util.List;
+
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
+
+import lombok.RequiredArgsConstructor;
 import ru.javaboys.vibetraderbackend.finam.client.api.AccountsApiV1;
 import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
 import ru.javaboys.vibetraderbackend.finam.dto.account.AccountResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.account.OrderLeg;
 import ru.javaboys.vibetraderbackend.finam.dto.account.OrderStateResponse;
+import ru.javaboys.vibetraderbackend.finam.dto.account.OrderType;
 import ru.javaboys.vibetraderbackend.finam.dto.account.OrdersResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.account.PlaceOrderRequest;
-import ru.javaboys.vibetraderbackend.finam.dto.trade.TradesResponse;
-import ru.javaboys.vibetraderbackend.finam.dto.transaction.TransactionsResponse;
-
-import java.time.Instant;
+import ru.javaboys.vibetraderbackend.finam.dto.account.StopConditionType;
+import ru.javaboys.vibetraderbackend.finam.dto.account.TimeInForceType;
+import ru.javaboys.vibetraderbackend.finam.dto.account.ValidBeforeType;
 
 @Component
 @RequiredArgsConstructor
@@ -23,135 +28,152 @@ public class AccountsServiceTools {
 
     @Tool(description = """
             Возвращает полную информацию по торговому счёту.
-            Используй, когда нужно получить сводку по счёту: базовые атрибуты, позиции, денежные средства, портфели (если применимо).
-            Вход: точный идентификатор счёта.
-            Выход: AccountResponse.
+            Используй, когда нужно получить детальную информацию по счёту.
             """)
     public AccountResponse getAccount(
             @ToolParam(description = """
-                    Идентификатор счёта. Строка без пробелов, например: "1899011".
-                    """)
-            String accountId
+                    Служебный UID запроса; передай как есть, строкой.
+                    """) String promptUid,
+            @ToolParam(description = """
+                    Идентификатор счёта.
+                    """) String accountId
     ) {
         return accounts.account(accountId);
     }
 
-    @Tool(description = """
-            Возвращает историю сделок по счёту за указанный интервал.
-            Передавай оба края интервала в формате ISO-8601 с суффиксом Z (UTC), например: 2025-09-01T00:00:00Z.
-            Параметры: accountId, interval.start_time, interval.end_time, limit.
-            Выход: TradesResponse.
-            """)
-    public TradesResponse trades(
-            @ToolParam(description = """
-                    Идентификатор счёта. Пример: "1899011".
-                    """)
-            String accountId,
-            @ToolParam(description = """
-                    Начало интервала в формате ISO-8601 UTC. Пример: "2025-09-01T00:00:00Z".
-                    """)
-            String intervalStartTimeIso,
-            @ToolParam(description = """
-                    Окончание интервала в формате ISO-8601 UTC. Пример: "2025-09-30T23:59:59Z".
-                    Должно быть не раньше значения начала интервала.
-                    """)
-            String intervalEndTimeIso,
-            @ToolParam(description = """
-                    Лимит количества записей (Long, > 0). Рекомендуемые значения: 100..1000 в зависимости от объёма истории.
-                    """)
-            Long limit
-    ) {
-        Instant start = Instant.parse(intervalStartTimeIso);
-        Instant end = Instant.parse(intervalEndTimeIso);
-        return accounts.trades(accountId, start, end, limit);
-    }
-
-    @Tool(description = """
-            Возвращает список транзакций по счёту (пополнения/выводы, комиссии, налоги, торговые операции и пр.) за указанный интервал.
-            Передавай оба края интервала в формате ISO-8601 с Z (UTC), например: 2025-09-01T00:00:00Z.
-            Параметры: accountId, interval.start_time, interval.end_time.
-            Выход: TransactionsResponse.
-            """)
-    public TransactionsResponse transactions(
-            @ToolParam(description = """
-                    Идентификатор счёта. Пример: "1899011".
-                    """)
-            String accountId,
-            @ToolParam(description = """
-                    Начало интервала в формате ISO-8601 UTC. Пример: "2025-09-01T00:00:00Z".
-                    """)
-            String intervalStartTimeIso,
-            @ToolParam(description = """
-                    Окончание интервала в формате ISO-8601 UTC. Пример: "2025-09-30T23:59:59Z".
-                    """)
-            String intervalEndTimeIso
-    ) {
-        Instant start = Instant.parse(intervalStartTimeIso);
-        Instant end = Instant.parse(intervalEndTimeIso);
-        return accounts.transactions(accountId, start, end);
-    }
+//    На данный момент эти тулы не используется, так как API для демо счета не возвращает данные
+//    @Tool(description = """
+//            Возвращает историю сделок по счёту за указанный интервал.
+//            Передавай оба края интервала в формате ISO-8601 с суффиксом Z (UTC), например: 2025-09-01T00:00:00Z.
+//            """)
+//    public TradesResponse trades(
+//            @ToolParam(description = """
+//                    Служебный UID запроса; передай как есть, строкой.
+//                    """) String promptUid,
+//            @ToolParam(description = """
+//                    Идентификатор счёта.
+//                    """)
+//            String accountId,
+//            @ToolParam(description = """
+//                    Начало интервала в формате ISO-8601 UTC. Пример: "2025-09-01T00:00:00Z".
+//                    """)
+//            String intervalStartTimeIso,
+//            @ToolParam(description = """
+//                    Окончание интервала в формате ISO-8601 UTC. Пример: "2025-09-30T23:59:59Z".
+//                    Должно быть не раньше значения начала интервала.
+//                    """)
+//            String intervalEndTimeIso,
+//            @ToolParam(description = """
+//                    Лимит количества записей (Long, > 0). Рекомендуемые значения: 100..1000 в зависимости от объёма истории.
+//                    """)
+//            Long limit
+//    ) {
+//        Instant start = Instant.parse(intervalStartTimeIso);
+//        Instant end = Instant.parse(intervalEndTimeIso);
+//        return accounts.trades(accountId, start, end, limit);
+//    }
+//
+//    @Tool(description = """
+//            Возвращает список транзакций по счёту за указанный интервал.
+//            Передавай оба края интервала в формате ISO-8601 с Z (UTC), например: 2025-09-01T00:00:00Z.
+//            """)
+//    public TransactionsResponse transactions(
+//            @ToolParam(description = """
+//                    Служебный UID запроса; передай как есть, строкой.
+//                    """) String promptUid,
+//            @ToolParam(description = """
+//                    Идентификатор счёта.
+//                    """)
+//            String accountId,
+//            @ToolParam(description = """
+//                    Начало интервала в формате ISO-8601 UTC. Пример: "2025-09-01T00:00:00Z".
+//                    """)
+//            String intervalStartTimeIso,
+//            @ToolParam(description = """
+//                    Окончание интервала в формате ISO-8601 UTC. Пример: "2025-09-30T23:59:59Z".
+//                    """)
+//            String intervalEndTimeIso
+//    ) {
+//        Instant start = Instant.parse(intervalStartTimeIso);
+//        Instant end = Instant.parse(intervalEndTimeIso);
+//        return accounts.transactions(accountId, start, end);
+//    }
 
     @Tool(description = """
             Размещает новый торговый ордер по указанному счёту.
-            Необходимо указать все обязательные параметры заявки: символ инструмента, направление (BUY/SELL),
-            количество, цену (для лимитного ордера), срок действия (time_in_force/valid_before) и при необходимости client_order_id.
-            Выход: OrderStateResponse с текущим состоянием ордера.
+            Необходимо указать все обязательные параметры заявки.
             """)
     public OrderStateResponse placeOrder(
             @ToolParam(description = """
-                    Идентификатор счёта, на который выставляется ордер. Пример: "1899011".
-                    """)
-            String accountId,
+                    Служебный UID запроса; передай как есть, строкой.
+                    """) String promptUid,
             @ToolParam(description = """
-                    Код инструмента (symbol), например "SBER_TQBR".
-                    """)
-            String symbol,
+                    Идентификатор аккаунта.
+                    """) String accountId,
             @ToolParam(description = """
-                    Направление ордера: BUY или SELL.
-                    """)
-            String side,
+                            Символ инструмента.
+                            """) String symbol,
             @ToolParam(description = """
-                    Количество лотов. Целое число > 0.
-                    """)
-            Long quantity,
+                            Количество в шт.
+                            """) BigDecimal quantity,
             @ToolParam(description = """
-                    Цена за единицу. Для рыночных ордеров можно не указывать.
-                    """)
-            Double price,
+                            Сторона (long или short).
+                            """) String side,
             @ToolParam(description = """
-                    Срок действия ордера. Возможные значения: GTC (Good Till Cancel), DAY (до конца дня), IOC, FOK.
-                    """)
-            String timeInForce,
+                            Тип заявки.
+                            """) OrderType type,
             @ToolParam(description = """
-                    Метка клиента (client_order_id). Строка, уникальная в пределах аккаунта, для идемпотентности.
-                    Необязательный параметр.
-                    """)
-            String clientOrderId,
+                            Срок действия заявки.
+                            """) TimeInForceType timeInForce,
             @ToolParam(description = """
-                    Время, до которого ордер активен, если поддерживается. Формат ISO-8601 UTC.
-                    Необязательный параметр.
-                    """)
-            String validBeforeIso
+                            Необходимо для лимитной и стоп лимитной заявки.
+                            """) BigDecimal limitPrice,
+            @ToolParam(description = """
+                            Необходимо для стоп рыночной и стоп лимитной заявки.
+                            """) BigDecimal stopPrice,
+            @ToolParam(description = """
+                            Необходимо для стоп рыночной и стоп лимитной заявки.
+                            """) StopConditionType stopCondition,
+            @ToolParam(description = """
+                            Необходимо для мульти лег заявки.
+                            """) List<OrderLeg> legs,
+            @ToolParam(description = """
+                            Уникальный идентификатор заявки. Автоматически генерируется, если не отправлен. (максимум 20 символов).
+                            """) String clientOrderId,
+            @ToolParam(description = """
+                            Срок действия условной заявки. Заполняется для заявок с типом ORDER_TYPE_STOP, ORDER_TYPE_STOP_LIMIT.
+                            """) ValidBeforeType validBefore,
+            @ToolParam(description = """
+                            Метка заявки. (максимум 128 символов).
+                            """) String comment
     ) {
         PlaceOrderRequest req = PlaceOrderRequest.builder()
+                .accountId(accountId)
                 .symbol(symbol)
-                .side(side)
                 .quantity(BigDecimalValueWrapper.valueOf(quantity))
-//                .price(price)
-//                .timeInForce(timeInForce)
+                .side(side)
+                .type(type)
+                .timeInForce(timeInForce)
+                .limitPrice(BigDecimalValueWrapper.valueOf(limitPrice))
+                .stopPrice(BigDecimalValueWrapper.valueOf(stopPrice))
+                .stopCondition(stopCondition)
+                .legs(legs)
                 .clientOrderId(clientOrderId)
-//                .validBefore(validBeforeIso != null ? Instant.parse(validBeforeIso) : null)
+                .validBefore(validBefore)
+                .comment(comment)
                 .build();
         return accounts.placeOrder(accountId, req);
     }
 
     @Tool(description = """
             Возвращает состояние конкретного ордера по его идентификатору и счёту.
-            Выход: OrderStateResponse с полями статуса, исполненного количества, оставшегося количества и др.
             """)
     public OrderStateResponse order(
             @ToolParam(description = """
-                    Идентификатор счёта. Пример: "1899011".
+                    Служебный UID запроса; передай как есть, строкой.
+                    """) String promptUid,
+            @ToolParam(description = """
+                    Идентификатор счёта.
                     """)
             String accountId,
             @ToolParam(description = """
@@ -164,11 +186,13 @@ public class AccountsServiceTools {
 
     @Tool(description = """
             Возвращает список всех активных ордеров по счёту.
-            Выход: OrdersResponse — массив ордеров с их текущим состоянием.
             """)
     public OrdersResponse orders(
             @ToolParam(description = """
-                    Идентификатор счёта. Пример: "1899011".
+                    Служебный UID запроса; передай как есть, строкой.
+                    """) String promptUid,
+            @ToolParam(description = """
+                    Идентификатор счёта.
                     """)
             String accountId
     ) {
@@ -177,11 +201,14 @@ public class AccountsServiceTools {
 
     @Tool(description = """
             Отменяет ранее выставленный ордер по его идентификатору.
-            Выход: OrderStateResponse с новым состоянием (например, CANCELLED).
+            Возвращает детальную информацию по ордеру.
             """)
     public OrderStateResponse cancelOrder(
             @ToolParam(description = """
-                    Идентификатор счёта. Пример: "1899011".
+                    Служебный UID запроса; передай как есть, строкой.
+                    """) String promptUid,
+            @ToolParam(description = """
+                    Идентификатор счёта.
                     """)
             String accountId,
             @ToolParam(description = """
