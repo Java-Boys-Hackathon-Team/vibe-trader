@@ -35,7 +35,7 @@ public interface AccountsApiV1 {
             @PathVariable("accountId") String accountId,
             @RequestParam("interval.start_time") Instant startTime,
             @RequestParam("interval.end_time") Instant endTime,
-            @RequestParam("limi") Long limit
+            @RequestParam("limit") Long limit
     );
 
     @GetMapping(value = "/{accountId}/transactions")

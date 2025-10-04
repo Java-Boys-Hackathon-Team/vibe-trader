@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import org.springframework.test.context.TestExecutionListeners;
 import ru.javaboys.vibetraderbackend.finam.client.api.AccountsApiV1;
 import ru.javaboys.vibetraderbackend.finam.client.api.AssetsApiV1;
 import ru.javaboys.vibetraderbackend.finam.client.api.ExchangesApiV1;
@@ -42,8 +43,13 @@ import ru.javaboys.vibetraderbackend.finam.dto.instrument.QuoteResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.instrument.TimeFrameType;
 import ru.javaboys.vibetraderbackend.finam.dto.trade.TradesResponse;
 import ru.javaboys.vibetraderbackend.finam.dto.transaction.TransactionsResponse;
+import ru.javaboys.vibetraderbackend.utils.DotenvTestExecutionListener;
 
-@SpringBootTest
+//@SpringBootTest
+@TestExecutionListeners(
+        listeners = DotenvTestExecutionListener.class,
+        mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS
+)
 public class FinamClientTest {
     @Autowired private FinamClient finamClient;
     @Value("${finam-api.secret}") String secret;
