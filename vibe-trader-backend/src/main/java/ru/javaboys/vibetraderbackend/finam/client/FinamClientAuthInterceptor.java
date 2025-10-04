@@ -16,7 +16,8 @@ import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsResponse;
 @Slf4j
 @RequiredArgsConstructor
 public class FinamClientAuthInterceptor implements RequestInterceptor {
-    private final SessionsApiV1 SessionsApi;
+    private final TokenInfoHolder tokenInfoHolder;
+    private final SessionsApiV1 sessionsApi;
     private final String secret;
 
     private TokenInfo tokenInfo;
@@ -28,14 +29,16 @@ public class FinamClientAuthInterceptor implements RequestInterceptor {
     }
 
     private TokenInfo getTokenInfo() {
-        if (tokenInfo == null || tokenInfo.getExpiresAt().minus(3, ChronoUnit.MINUTES).isAfter(Instant.now())) {
+        if (tokenInfo == null || tokenInfo.getExpiresAt().minus(3, ChronoUnit.MINUTES).isBefore(Instant.now())) {
             log.info("Requesting new token, old tokenInfo: {}", tokenInfo);
-            AuthResponse token = SessionsApi.auth(AuthRequest.builder().secret(secret).build());
-            TokenDetailsResponse tokenResponse = SessionsApi.tokenDetails(TokenDetailsRequest.builder().token(token.getToken()).build());
+            AuthResponse token = sessionsApi.auth(AuthRequest.builder().secret(secret).build());
+            TokenDetailsResponse tokenResponse = sessionsApi.tokenDetails(TokenDetailsRequest.builder().token(token.getToken()).build());
             tokenInfo = new TokenInfo(token.getToken(), tokenResponse.getExpiresAt());
+            tokenInfoHolder.setTokenInfo(tokenResponse);
+        } else {
+            log.info("Using current token, tokenInfo: {}", tokenInfo);
         }
 
-        log.info("Using current token, tokenInfo: {}", tokenInfo);
         return tokenInfo;
     }
 

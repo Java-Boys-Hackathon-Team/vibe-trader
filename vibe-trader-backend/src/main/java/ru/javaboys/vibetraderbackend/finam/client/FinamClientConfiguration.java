@@ -18,10 +18,15 @@ public class FinamClientConfiguration {
 
     @Bean
     public RequestInterceptor apiKeyRequestInterceptor(
+            TokenInfoHolder tokenInfoHolder,
             SessionsApiV1 sessionsApi,
             @Value("${finam-api.secret}") String secret
     ) {
-        return new FinamClientAuthInterceptor(sessionsApi, secret);
+        return new FinamClientAuthInterceptor(
+                tokenInfoHolder,
+                sessionsApi,
+                secret
+        );
     }
 
 }

@@ -8,6 +8,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import lombok.RequiredArgsConstructor;
+import ru.javaboys.vibetraderbackend.finam.client.TokenInfoHolder;
 import ru.javaboys.vibetraderbackend.finam.client.api.AccountsApiV1;
 import ru.javaboys.vibetraderbackend.finam.dto.BigDecimalValueWrapper;
 import ru.javaboys.vibetraderbackend.finam.dto.account.AccountResponse;
@@ -19,12 +20,30 @@ import ru.javaboys.vibetraderbackend.finam.dto.account.PlaceOrderRequest;
 import ru.javaboys.vibetraderbackend.finam.dto.account.StopConditionType;
 import ru.javaboys.vibetraderbackend.finam.dto.account.TimeInForceType;
 import ru.javaboys.vibetraderbackend.finam.dto.account.ValidBeforeType;
+import ru.javaboys.vibetraderbackend.finam.dto.auth.TokenDetailsResponse;
 
 @Component
 @RequiredArgsConstructor
 public class AccountsServiceTools {
 
+    private final TokenInfoHolder tokenInfoHolder;
     private final AccountsApiV1 accounts;
+
+    @Tool(description = """
+            Возвращает идентификатор счёта.
+            """)
+    public String getAccountId() {
+        TokenDetailsResponse tokenInfo = tokenInfoHolder.getTokenInfo();
+        if (tokenInfo != null) {
+            try {
+                return tokenInfo.getAccountIds().getFirst();
+            } catch (Exception e) {
+                return "Счёт отсутствует";
+            }
+        }
+
+        return "Счёт отсутствует";
+    }
 
     @Tool(description = """
             Возвращает полную информацию по торговому счёту.
