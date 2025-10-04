@@ -1,0 +1,82 @@
+# IntelliJ IDEA HTTP client collection for AI chat API
+# This file walks through the full flow required to successfully call the multipart /messages endpoint.
+# Run requests top-to-bottom. Use the gutter icons in IDEA to execute each request.
+
+@host = localhost
+@port = 8080
+@baseUrl = http://{{host}}:{{port}}/api/ai
+
+### 1) Check service is up: list dialogs
+GET {{baseUrl}}/dialogs
+Accept: application/json
+
+### 2) Create a new dialog and capture its id as {{dialogId}}
+POST {{baseUrl}}/dialogs
+Content-Type: application/json
+Accept: application/json
+
+{
+  "title": "Test dialog"
+}
+
+> {%
+// Save created dialog id for subsequent requests
+var data = JSON.parse(response.body);
+client.global.set("dialogId", String(data.id));
+client.log("dialogId=" + client.global.get("dialogId"));
+%}
+
+### 3) Check messages in the created dialog (expected empty on first run)
+GET {{baseUrl}}/dialogs/1/messages
+Accept: application/json
+
+### 4) Send a user message WITH optional file using multipart/form-data
+# The backend expects two parts:
+#  - data: JSON matching SendMessageRequest { content: string }
+#  - file: optional file (any type). Here we provide a small inline text sample.
+POST {{baseUrl}}/dialogs/1/messages
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+Accept: application/json
+
+--WebAppBoundary
+Content-Disposition: form-data; name="data"
+Content-Type: application/json
+
+{"content": "Привет! Это сообщение с приложенным файлом."}
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="test.csv"
+
+< dataset/test.csv
+--WebAppBoundary
+
+> {%
+// Extract taskId and userMessageId from SendMessageResponse
+var data = JSON.parse(response.body);
+if (data.taskId) client.global.set("taskId", String(data.taskId));
+if (data.userMessageId) client.global.set("userMessageId", String(data.userMessageId));
+client.log("taskId=" + client.global.get("taskId") + ", userMessageId=" + client.global.get("userMessageId"));
+%}
+
+### 5) Poll task status (repeat manually until status becomes COMPLETED/FAILED)
+GET {{baseUrl}}/tasks/{{taskId}}
+Accept: application/json
+
+### 6) Read dialog messages again (should include the user message and eventually assistant response)
+GET {{baseUrl}}/dialogs/{{dialogId}}/messages
+Accept: application/json
+
+### 7) Alternative: send a user message WITHOUT file (JSON endpoint variant)
+POST {{baseUrl}}/dialogs/{{dialogId}}/messages
+Content-Type: application/json
+Accept: application/json
+
+{
+  "content": "Сообщение без файла"
+}
+
+> {%
+var data = JSON.parse(response.body);
+if (data.taskId) client.global.set("taskId", String(data.taskId));
+if (data.userMessageId) client.global.set("userMessageId", String(data.userMessageId));
+client.log("taskId=" + client.global.get("taskId") + ", userMessageId=" + client.global.get("userMessageId"));
+%}
