@@ -44,10 +44,10 @@ Content-Type: application/json
 
 {"content": "Привет! Это сообщение с приложенным файлом."}
 --WebAppBoundary
-Content-Disposition: form-data; name="file"; filename="test.csv"
-
-< dataset/test.csv
---WebAppBoundary
+#Content-Disposition: form-data; name="file"; filename="test.csv"
+#
+#< dataset/test.csv
+#--WebAppBoundary
 
 > {%
 // Extract taskId and userMessageId from SendMessageResponse

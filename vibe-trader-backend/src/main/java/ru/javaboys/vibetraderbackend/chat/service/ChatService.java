@@ -80,7 +80,7 @@ public class ChatService {
                 log.info("Accepted file '{}' (ext={}) for dialog {}", filename, ext, dialogId);
             }
         } else {
-            log.debug("No file provided for dialog {}", dialogId);
+            log.info("No file provided for dialog {}", dialogId);
         }
         // Delegate to the primary method to keep persistence and async behavior consistent
         return sendUserMessage(dialogId, content);
