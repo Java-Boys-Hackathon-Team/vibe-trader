@@ -1,10 +1,9 @@
 package ru.javaboys.vibetraderbackend.chat.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
 public class SendMessageRequest {
-    @NotBlank
+    // content can be blank when a file is provided
     private String content;
 }

@@ -58,18 +58,20 @@ public class AiChatController {
                 .collect(Collectors.toList());
     }
 
-    // Existing JSON endpoint kept for backward compatibility
-    @PostMapping("/dialogs/{dialogId}/messages")
-    public SendMessageResponse sendMessage(@PathVariable Long dialogId, @RequestBody @Validated SendMessageRequest request) {
-        return chatService.sendUserMessage(dialogId, request.getContent());
-    }
-
     // New endpoint variant to support optional file upload along with other data
     @PostMapping(value = "/dialogs/{dialogId}/messages", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public SendMessageResponse sendMessageWithFile(@PathVariable Long dialogId,
-                                                   @RequestPart("data") @Validated SendMessageRequest request,
+                                                   @RequestPart("data") SendMessageRequest request,
                                                    @RequestPart(value = "file", required = false) MultipartFile file) {
-        return chatService.sendUserMessage(dialogId, request.getContent(), file);
+        String content = request != null ? request.getContent() : null;
+        boolean noContent = (content == null || content.trim().isEmpty());
+        boolean noFile = (file == null || file.isEmpty());
+        if (noContent && noFile) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Either content or file must be provided");
+        }
+        return chatService.sendUserMessage(dialogId, content == null ? "" : content, file);
     }
 
     @GetMapping("/tasks/{taskId}")
