@@ -6,9 +6,10 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import ru.javaboys.vibetraderbackend.chat.dto.SendMessageResponse;
@@ -22,7 +23,6 @@ import ru.javaboys.vibetraderbackend.chat.repository.ChatMessageRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.DialogRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.PromptRepository;
 import ru.javaboys.vibetraderbackend.chat.repository.UserAsyncTaskRepository;
-import ru.javaboys.vibetraderbackend.event.TaskCreatedEvent;
 
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +40,6 @@ public class ChatService {
     private final UserAsyncTaskRepository taskRepository;
     private final PromptRepository promptRepository;
     private final ChatAsyncProcessor asyncProcessor;
-    private final ApplicationEventPublisher events;
 
     @Transactional
     public Dialog createDialog(String title) {
@@ -56,33 +55,6 @@ public class ChatService {
     @Transactional(readOnly = true)
     public List<ChatMessage> getDialogMessages(Long dialogId) {
         return chatMessageRepository.findByDialog_IdOrderByCreatedAtAsc(dialogId);
-    }
-
-    @Transactional
-    public SendMessageResponse sendUserMessage(Long dialogId, String content) {
-        Dialog dialog = dialogRepository.findById(dialogId)
-                .orElseThrow(() -> new IllegalArgumentException("Dialog not found: " + dialogId));
-
-        // Create async task in RUNNING state
-        UserAsyncTask task = taskRepository.save(UserAsyncTask.builder().status(TaskStatus.RUNNING).build());
-
-        // Save user message bound to the task
-        ChatMessage userMessage = ChatMessage.builder()
-                .dialog(dialog)
-                .task(task)
-                .role(MessageRole.USER)
-                .content(content)
-                .build();
-        userMessage = chatMessageRepository.save(userMessage);
-
-        // Trigger async processing for assistant response
-        asyncProcessor.processUserMessage(task.getId(), dialog.getId(), userMessage.getId(), content, false);
-
-        return SendMessageResponse.builder()
-                .taskId(task.getId())
-                .userMessageId(userMessage.getId())
-                .status(task.getStatus())
-                .build();
     }
 
     @Transactional
@@ -150,9 +122,6 @@ public class ChatService {
         UserAsyncTask task = taskRepository.save( UserAsyncTask.builder().status( TaskStatus.RUNNING ).build() );
         log.info( "Задача сохранена в БД, id={}", task.getId() );
 
-        events.publishEvent( new TaskCreatedEvent( task.getId() ) );
-        log.info( "Опубликовано событие TaskCreatedEvent для задачи id={}", task.getId() );
-
         ChatMessage userMessage = ChatMessage.builder()
                 .dialog(dialog)
                 .task(task)
@@ -171,8 +140,21 @@ public class ChatService {
             log.info("Saved {} prompt rows for chatMessage {}", parsedPrompts.size(), userMessage.getId());
         }
 
+        Long userMsgId = userMessage.getId();
+        boolean hadCsv = isCsv;
+
         // 5) Trigger async processing
-        asyncProcessor.processUserMessage(task.getId(), dialog.getId(), userMessage.getId(), content, isCsv);
+        if ( TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    asyncProcessor.processUserMessage( task.getId(), dialog.getId(), userMsgId, content, hadCsv);
+                }
+            });
+        } else {
+            // на случай вызова вне транзакции
+            asyncProcessor.processUserMessage( task.getId(), dialog.getId(), userMsgId, content, hadCsv);
+        }
 
         return SendMessageResponse.builder()
                 .taskId(task.getId())
