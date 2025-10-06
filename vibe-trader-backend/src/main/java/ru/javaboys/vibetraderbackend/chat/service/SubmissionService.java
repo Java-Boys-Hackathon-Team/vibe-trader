@@ -1,6 +1,7 @@
 package ru.javaboys.vibetraderbackend.chat.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,11 +16,10 @@ import ru.javaboys.vibetraderbackend.chat.repository.SubmissionRepository;
 import java.net.URI;
 import java.util.Optional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SubmissionService {
-
-    private static final Logger log = LoggerFactory.getLogger(SubmissionService.class);
 
     private final SubmissionRepository submissionRepository;
 
@@ -33,7 +33,6 @@ public class SubmissionService {
                                        String request,
                                        Prompt prompt,
                                        ChatMessage assistantMessage) {
-        validateRequestPathAndQuery(request);
         int attempts = 0;
         while (true) {
             attempts++;
@@ -51,30 +50,9 @@ public class SubmissionService {
                     log.warn("Upsert retry exhausted for promt_uid={} due to {}", promtUid, ex.getMessage());
                     throw ex;
                 }
-                // likely unique constraint race; re-read and retry
-                existingOpt = submissionRepository.findByPromtUid(promtUid);
-                if (existingOpt.isEmpty()) {
-                    // small backoff path; continue loop to try again
-                    continue;
-                }
-            }
-        }
-    }
 
-    private void validateRequestPathAndQuery(String request) {
-        if (request == null || request.isBlank()) {
-            throw new IllegalArgumentException("request must not be blank");
-        }
-        if (!request.startsWith("/")) {
-            throw new IllegalArgumentException("request must start with '/'");
-        }
-        try {
-            URI uri = URI.create(request);
-            if (uri.getScheme() != null || uri.getHost() != null) {
-                throw new IllegalArgumentException("request must be a path and optional query only");
+                submissionRepository.findByPromtUid(promtUid);
             }
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid request path/query format", e);
         }
     }
 }

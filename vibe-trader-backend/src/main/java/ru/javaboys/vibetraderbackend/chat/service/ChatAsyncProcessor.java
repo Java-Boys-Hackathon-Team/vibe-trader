@@ -43,7 +43,6 @@ public class ChatAsyncProcessor {
     private final DialogRepository dialogRepository;
     private final PromptRepository promptRepository;
     private final SubmissionRepository submissionRepository;
-    private final PromptCleanupService promptCleanupService;
 
     private final AccountsServiceTools accountsTools;
     private final AssetsServiceTools assetsTools;
@@ -72,7 +71,6 @@ public class ChatAsyncProcessor {
             if (hadCsv) {
                 List<Prompt> prompts = promptRepository.findByChatMessage_Id(userMessageId);
                 if (!prompts.isEmpty()) {
-                    // Exclude prompts that already have submissions (match by Prompt.uid == Submission.promtUid)
                     Set<String> uids = prompts.stream().map(Prompt::getUid).collect(Collectors.toSet());
                     List<Submission> existingSubs = submissionRepository.findAllByPromtUidIn(uids);
                     Set<String> existingUids = existingSubs.stream().map(Submission::getPromtUid).collect(Collectors.toSet());
@@ -97,7 +95,6 @@ public class ChatAsyncProcessor {
                                     """;
                             llmService.call(
                                     LlmRequest.builder()
-                                            //.conversationId(String.valueOf(dialogId))
                                             .systemMessage(PromptTemplates.SYSTEM_MAPPING)
                                             .userMessage(user)
                                             .userVariables(Map.of("uid", promptUid, "q", question))
@@ -114,7 +111,7 @@ public class ChatAsyncProcessor {
                 }
             } else {
                 String answer = llmService.call(LlmRequest.builder()
-//                        .conversationId(String.valueOf(dialogId))
+                        .conversationId(String.valueOf(dialogId))
                         .userMessage(userContent == null ? "" : userContent)
                         .tools(tools)
                         .build());
