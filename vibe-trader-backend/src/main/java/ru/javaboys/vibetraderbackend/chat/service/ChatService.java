@@ -89,8 +89,8 @@ public class ChatService {
                             log.warn("CSV file '{}' contains no data rows", filename);
                         }
                         for (CSVRecord rec : records) {
-                            String uid = null;
-                            String question = null;
+                            String uid;
+                            String question;
                             try {
                                 uid = rec.get("uid");
                                 question = rec.isMapped("question") ? rec.get("question") : null;
